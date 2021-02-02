@@ -77,10 +77,45 @@ void Atlas::CreateNewMap()
     mspMaps.insert(mpCurrentMap);
 }
 
+void Atlas::CreateNewMap(int nAgentID)
+{
+    /*
+     * Overloaded for CoORBSLAM
+     * When we create a new map we need to create it with respect to
+     * the agent that is creating it.
+     */
+    unique_lock<mutex> lock(mMutexAtlas);
+    cout << "Creation of new map with id: " << Map::nNextId << endl;
+    cout << "Map created for Agent: " << nAgentID;
+    if(mpCurrentMap){
+        cout << "Exits current map " << endl;
+        if(!mspMaps.empty() && mnLastInitKFidMap < mpCurrentMap->GetMaxKFid())
+            mnLastInitKFidMap = mpCurrentMap->GetMaxKFid()+1; //The init KF is the next of current maximum
+
+        mpCurrentMap->SetStoredMap();
+        cout << "Saved map with ID: " << mpCurrentMap->GetId() << endl;
+
+        //if(mHasViewer)
+        //    mpViewer->AddMapToCreateThumbnail(mpCurrentMap);
+    }
+    cout << "Creation of new map with last KF id: " << mnLastInitKFidMap << endl;
+    mpCurrentMap = new Map(mnLastInitKFidMap);
+    mpCurrentMap->SetCurrentMap();
+    mspMaps.insert(mpCurrentMap);
+    //Add the association between this new map and agentId
+    if(mmAgentMaps.find(nAgentID) == mmAgentMaps.end()){
+        cout << "New AgentID found" << endl;
+        mmAgentMaps.insert(pair<int, Map*>(nAgentID, mpCurrentMap));
+    }else{
+        cout << "Existing AgentID found" << endl;
+        mmAgentMaps[nAgentID] = mpCurrentMap;
+    }
+}
+
 void Atlas::ChangeMap(Map* pMap)
 {
     unique_lock<mutex> lock(mMutexAtlas);
-    cout << "Chage to map with id: " << pMap->GetId() << endl;
+    cout << "Change to map with id: " << pMap->GetId() << endl;
     if(mpCurrentMap){
         mpCurrentMap->SetStoredMap();
     }
@@ -208,12 +243,12 @@ void Atlas::clearAtlas()
 
 Map* Atlas::GetCurrentMap()
 {
+
     unique_lock<mutex> lock(mMutexAtlas);
     if(!mpCurrentMap)
         CreateNewMap();
     while(mpCurrentMap->IsBad())
         usleep(3000);
-
     return mpCurrentMap;
 }
 
@@ -374,6 +409,16 @@ long unsigned int Atlas::GetNumLivedMP() {
     }
 
     return num;
+}
+
+//Agent related methods
+
+void Atlas::SetAgent(int nAgentID){
+    mnCurrentAgent = nAgentID;
+}
+
+int Atlas::GetCurrentAgent(){
+    return mnCurrentAgent;
 }
 
 } //namespace ORB_SLAM3

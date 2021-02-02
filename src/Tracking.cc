@@ -2152,9 +2152,8 @@ void Tracking::CreateInitialMapMonocular()
     // Bundle Adjustment
     Verbose::PrintMess("New Map created with " + to_string(mpAtlas->MapPointsInMap()) + " points", Verbose::VERBOSITY_QUIET);
     Optimizer::GlobalBundleAdjustemnt(mpAtlas->GetCurrentMap(),20);
-
+    Verbose::PrintMess("GlobalBundleAdjustment done", Verbose::VERBOSITY_QUIET);
     pKFcur->PrintPointDistribution();
-
     float medianDepth = pKFini->ComputeSceneMedianDepth(2);
     float invMedianDepth;
     if(mSensor == System::IMU_MONOCULAR)
@@ -2233,6 +2232,8 @@ void Tracking::CreateInitialMapMonocular()
     mState=OK;
 
     initID = pKFcur->mnId;
+
+
 }
 
 void Tracking::CreateMapInAtlas()

@@ -1089,7 +1089,7 @@ void LoopClosing::CorrectLoop()
             NonCorrectedSim3[pKFi]=g2oSiw;
         }
 
-        // Correct all MapPoints obsrved by current keyframe and neighbors, so that they align with the other side of the loop
+        // Correct all MapPoints observed by current keyframe and neighbors, so that they align with the other side of the loop
         cout << "LC: start correcting KeyFrames" << endl;
         cout << "LC: there are " << CorrectedSim3.size() << " KFs in the local window" << endl;
         for(KeyFrameAndPose::iterator mit=CorrectedSim3.begin(), mend=CorrectedSim3.end(); mit!=mend; mit++)

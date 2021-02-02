@@ -75,8 +75,8 @@ public:
     Atlas();
     Atlas(int initKFid); // When its initialization the first map is created
     ~Atlas();
-
     void CreateNewMap();
+    void CreateNewMap(int AgentID);
     void ChangeMap(Map* pMap);
 
     unsigned long int GetLastInitKFid();
@@ -136,13 +136,24 @@ public:
 
     long unsigned int GetNumLivedMP();
 
-protected:
+    //Agent related methods
+    void SetAgent(int nAgentID);
+    int GetCurrentAgent();
 
+protected:
+    //Agent related context members
+    int mnCurrentAgent;
+    std::map<int, Map*> mmAgentMaps;
+    std::map<int, unsigned long int> mmnAgentLastInitFKidMap;
+    //Member variables that need to correspond to a unique agent
+    Map* mpCurrentMap;
+    unsigned long int mnLastInitKFidMap;
+
+    //Member variables that can be shared between agents
     std::set<Map*> mspMaps;
     std::set<Map*> mspBadMaps;
     // Its necessary change the container from set to vector because libboost 1.58 and Ubuntu 16.04 have an error with this cointainer
     std::vector<Map*> mvpBackupMaps;
-    Map* mpCurrentMap;
 
     std::vector<GeometricCamera*> mvpCameras;
     std::vector<KannalaBrandt8*> mvpBackupCamKan;
@@ -150,9 +161,6 @@ protected:
 
     //Pinhole testCam;
     std::mutex mMutexAtlas;
-
-    unsigned long int mnLastInitKFidMap;
-
     Viewer* mpViewer;
     bool mHasViewer;
 

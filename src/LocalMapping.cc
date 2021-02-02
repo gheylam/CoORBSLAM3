@@ -1458,8 +1458,6 @@ void LocalMapping::ScaleRefinement()
     return;
 }
 
-
-
 bool LocalMapping::IsInitializing()
 {
     return bInitializing;

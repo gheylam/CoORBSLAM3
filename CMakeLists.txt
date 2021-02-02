@@ -78,11 +78,11 @@ include_directories(
 #)
 
 ## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
+add_service_files(
+   FILES
+   AddTwoInts.srv
+   NewAgentFeed.srv
+)
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -95,6 +95,7 @@ include_directories(
 generate_messages(
         DEPENDENCIES
         std_msgs
+        sensor_msgs
 )
 
 catkin_package(
@@ -254,7 +255,7 @@ target_link_libraries(${PROJECT_NAME}
 
 add_executable(CoORBSLAM3_mono src/corbslam3_mono.cpp)
 target_link_libraries(CoORBSLAM3_mono ${PROJECT_NAME})
-add_dependencies(CoORBSLAM3_mono CoORBSLAM3_generate_messages_cpp)
+add_dependencies(CoORBSLAM3_mono CoORBSLAM3_generate_messages_cpp CoORBSLAM3_gencpp)
 
 add_executable(agent src/agent.cpp)
 target_link_libraries(agent ${catkin_LIBRARIES})
@@ -266,4 +267,12 @@ add_dependencies(server CoORBSLAM3_generate_messages_cpp)
 
 add_executable(agent_image src/agent_image.cpp)
 target_link_libraries(agent_image ${catkin_LIBRARIES})
-add_dependencies(agent_image CoORBSLAM3_generate_messages_cpp)
+add_dependencies(agent_image CoORBSLAM3_generate_messages_cpp CoORBSLAM3_gencpp)
+
+add_executable(agent_node src/AgentNode.cpp)
+target_link_libraries(agent_node ${catkin_LIBRARIES})
+add_dependencies(agent_node CoORBSLAM3_generate_messages_cpp CoORBSLAM3_gencpp)
+
+add_executable(add_two_ints_client src/add_two_ints_client.cpp)
+target_link_libraries(add_two_ints_client ${catkin_LIBRARIES})
+add_dependencies(add_two_ints_client CoORBSLAM3_gencpp)
