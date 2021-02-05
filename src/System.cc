@@ -167,7 +167,7 @@ void System::Run(){
             std::cout << "No New Image Frames found" << std::endl;
         }
         SetAcceptImgFrames(true);
-        usleep(100000);
+        usleep(10000);
     }
 }
 
