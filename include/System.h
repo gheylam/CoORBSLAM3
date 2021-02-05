@@ -41,6 +41,8 @@
 #include "Viewer.h"
 #include "ImuTypes.h"
 
+#include "ImgFrame.h"
+
 
 namespace ORB_SLAM3
 {
@@ -121,6 +123,13 @@ public:
     cv::Mat TrackMonocular(const cv::Mat &im, const double &timestamp, const vector<IMU::Point>& vImuMeas = vector<IMU::Point>(), string filename="");
     cv::Mat TrackMonocular(const cv::Mat &im, const double &timestamp, const int nAgentID, const vector<IMU::Point>& vImuMeas = vector<IMU::Point>(), string filename="");
 
+    // For CoORBSLAM
+    void Run();
+    void SetAcceptImgFrames(bool flag);
+    bool CheckNewImgFrames();
+    void ProcessNewImgFrame();
+    void InsertImgFrame(ImgFrame *pImgFrame);
+    bool GetAcceptingNewImgFrames();
 
     // This stops local mapping thread (map building) and performs only camera tracking.
     void ActivateLocalizationMode();
@@ -247,6 +256,15 @@ private:
     //Agent bookkeeping
     std::vector<int> mAgentIds;
     int mNextAgentId;
+
+    //CoORBSLAM
+    bool mbFinished;
+    bool mbAcceptImgFrames;
+    std::mutex mMutexNewImgFrames;
+    std::mutex mMutexAccept;
+    std::mutex mMutexFinish;
+    std::list<ImgFrame*> mlNewImgFrames;
+
 };
 
 }// namespace ORB_SLAM

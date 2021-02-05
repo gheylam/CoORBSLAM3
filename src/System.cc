@@ -152,6 +152,55 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
 }
 
+void System::Run(){
+    while(1)
+    {
+        //ROS component will see that System is busy
+        SetAcceptImgFrames(false);
+
+        //Check if there are new Image Frames in the queue
+        if(CheckNewImgFrames()){
+            std::cout << "New Image Frames found" << std::endl;
+            //If there is a new KeyFrame then we process it
+            ProcessNewImgFrame();
+        }else{
+            std::cout << "No New Image Frames found" << std::endl;
+        }
+        SetAcceptImgFrames(true);
+        usleep(100000);
+    }
+}
+
+void System::SetAcceptImgFrames(bool flag){
+    unique_lock<mutex> lock(mMutexAccept);
+    mbAcceptImgFrames = flag;
+}
+
+bool System::CheckNewImgFrames(){
+    unique_lock<mutex> lock(mMutexNewImgFrames);
+    return(!mlNewImgFrames.empty());
+}
+
+void System::ProcessNewImgFrame(){
+    unique_lock<mutex> lock(mMutexNewImgFrames);
+    ImgFrame *pCurrentImgFrame = mlNewImgFrames.front();
+    mlNewImgFrames.pop_front();
+    std::cout << "Tracking new Img frame" << std::endl;
+    TrackMonocular(pCurrentImgFrame->GetImage(), pCurrentImgFrame->GetTimestamp(), pCurrentImgFrame->GetAgentId());
+}
+
+void System::InsertImgFrame(ImgFrame *pImgFrame){
+    unique_lock<mutex> lock(mMutexNewImgFrames);
+    std::cout << "New KeyFrame added" << std::endl;
+    mlNewImgFrames.push_back(pImgFrame);
+}
+
+bool System::GetAcceptingNewImgFrames(){
+    unique_lock<mutex> lock(mMutexAccept);
+    return mbAcceptImgFrames;
+}
+
+
 cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp, const vector<IMU::Point>& vImuMeas, string filename)
 {
     if(mSensor!=STEREO && mSensor!=IMU_STEREO)

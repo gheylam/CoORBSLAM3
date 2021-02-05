@@ -4,7 +4,7 @@
 #include <sensor_msgs/image_encodings.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgcodecs/imgcodecs.hpp>
-#include <opencv2/highgui.hpp>
+#include <opencv2/highgui/highgui.hpp>
 #include "CoORBSLAM3/NewAgentFeed.h"
 #include <cstdlib>
 
@@ -36,14 +36,17 @@ int main(int argc, char **argv){
 
 
   srv.request.nAgentID = 1997;
-  ros::Rate rate(10);
+  ros::Rate rate(5);
   int nImageNum = 0;
   while(ros::ok() && (nImageNum < vsFileNames.size())){
-      mImage = cv::imread(vsFileNames[nImageNum], CV_LOAD_IMAGE_UNCHANGED);
+      std::cout << vsFileNames[nImageNum] << std::endl;
+      mImage = cv::imread(vsFileNames[nImageNum], cv::IMREAD_UNCHANGED);
+      cv::Mat myImage = cv::imread(vsFileNames[nImageNum], cv::IMREAD_COLOR);
       if(mImage.empty()){
           ROS_ERROR_STREAM("Could not open or find the image at: " << vsFileNames[nImageNum]);
           ros::shutdown();
       }
+      cv::imshow("Display Window", myImage);
       img_bridge = cv_bridge::CvImage(std_msgs::Header(),
                                       sensor_msgs::image_encodings::MONO8, mImage);
       img_bridge.toImageMsg(msgImage);

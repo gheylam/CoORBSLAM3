@@ -17,7 +17,7 @@ else()
     message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
 endif()
 
-find_package(OpenCV 3)
+find_package(OpenCV 4)
 if(NOT OpenCV_FOUND)
     find_package(OpenCV 2.4.3 QUIET)
     if(NOT OpenCV_FOUND)
@@ -52,7 +52,8 @@ MESSAGE("Pangolin INLUCDE PATH:")
 MESSAGE(${Pangolin_INCLUDE_DIRS})
 
 MESSAGE("CATKIN GLOBAL BIN DEST")
-
+MESSAGE("OPENCV DIR")
+MESSAGE(${OpenCV_INCLUDE_DIRS})
 
 include_directories(
         ${PROJECT_SOURCE_DIR}
@@ -167,7 +168,7 @@ add_library(
         include/MLPnPsolver.h
         include/TwoViewReconstruction.h
         include/ClientPO.h
-)
+        src/ImgFrame.cpp include/ImgFrame.h)
 
 set(THIRDPARTY_LIBS
         ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
@@ -266,11 +267,11 @@ target_link_libraries(server ${catkin_LIBRARIES})
 add_dependencies(server CoORBSLAM3_generate_messages_cpp)
 
 add_executable(agent_image src/agent_image.cpp)
-target_link_libraries(agent_image ${catkin_LIBRARIES})
+target_link_libraries(agent_image ${catkin_LIBRARIES} ${OpenCV_LIBS})
 add_dependencies(agent_image CoORBSLAM3_generate_messages_cpp CoORBSLAM3_gencpp)
 
 add_executable(agent_node src/AgentNode.cpp)
-target_link_libraries(agent_node ${catkin_LIBRARIES})
+target_link_libraries(agent_node ${catkin_LIBRARIES} ${OpenCV_LIBS})
 add_dependencies(agent_node CoORBSLAM3_generate_messages_cpp CoORBSLAM3_gencpp)
 
 add_executable(add_two_ints_client src/add_two_ints_client.cpp)

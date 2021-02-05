@@ -21,11 +21,14 @@
 #include<algorithm>
 #include<fstream>
 #include<chrono>
+#include<unistd.h>
+#include<thread>
 
 #include<ros/ros.h>
 #include <cv_bridge/cv_bridge.h>
 #include<opencv2/core/core.hpp>
 #include"../include/System.h"
+#include"../include/ImgFrame.h"
 #include "CoORBSLAM3/AddTwoInts.h"
 #include "CoORBSLAM3/NewAgentFeed.h"
 
@@ -73,10 +76,17 @@ public:
     bool GrabImageSrv(CoORBSLAM3::NewAgentFeed::Request &req,
                    CoORBSLAM3::NewAgentFeed::Response &res);
 
+    void PassImage();
+
     ORB_SLAM3::System* mpSLAM;
+private:
+    std::list<ImgFrame*> mlNewImgFramesBuffer;
+    std::mutex mMutexImgFrameListChanges;
 };
 
 int sentOnce = 0;
+int startSystem = 0;
+std::thread ptSystem;
 
 int main(int argc, char **argv) {
     ros::init(argc, argv, "Mono_Agent");
@@ -87,7 +97,6 @@ int main(int argc, char **argv) {
         ros::shutdown();
         return 1;
     }
-
 
     ros::NodeHandle nodeHandler;
     /*
@@ -103,14 +112,19 @@ int main(int argc, char **argv) {
     ORB_SLAM3::System SLAM(argv[1], argv[2], ORB_SLAM3::System::MONOCULAR, true);
     ImageGrabber igb(&SLAM);
 
+    if(startSystem == 0){
+        ptSystem = thread(&ORB_SLAM3::System::Run, &SLAM);
+        startSystem++;
+        ROS_INFO("System started");
+    }
+
     //starting up the rosservice
     ros::ServiceServer service = nodeHandler.advertiseService("new_agent_feed", &ImageGrabber::GrabImageSrv, &igb);
     ROS_INFO("Ready to grab images");
-
     ros::Subscriber sub = nodeHandler.subscribe("/camera/image_raw", 1, &ImageGrabber::GrabImage,&igb);
+
+
     ros::spin();
-
-
 
     // Stop all threads
     SLAM.Shutdown();
@@ -143,7 +157,7 @@ void ImageGrabber::GrabImage(const sensor_msgs::ImageConstPtr& msg)
 bool ImageGrabber::GrabImageSrv(CoORBSLAM3::NewAgentFeed::Request &req,
                              CoORBSLAM3::NewAgentFeed::Response &res){
     res.ack = 1;
-    ROS_INFO("request: agentId=%1d", (long int)req.nAgentID);
+    //ROS_INFO("request: agentId=%1d", (long int)req.nAgentID);
     // Copy the ros image message to cv::Mat.
     cv_bridge::CvImagePtr cv_ptr;
     try{
@@ -153,10 +167,32 @@ bool ImageGrabber::GrabImageSrv(CoORBSLAM3::NewAgentFeed::Request &req,
         ROS_ERROR("cv_bridge exception: %s", e.what());
         return false;
     }
-    std::cout << cv_ptr->header.stamp.toSec() << std::endl;
-    std::cout << "header stamp: " << req.header.stamp.toSec() << std::endl;
-    mpSLAM->TrackMonocular(cv_ptr->image, req.header.stamp.toSec(), req.nAgentID);
+    //std::cout << "header stamp: " << req.header.stamp.toSec() << std::endl;
+    //mpSLAM->TrackMonocular(cv_ptr->image, req.header.stamp.toSec(), req.nAgentID);
+    ImgFrame* pNewImgFrame = new ImgFrame(cv_ptr->image, req.header.stamp.toSec(), req.nAgentID);
+    {
+        unique_lock<mutex> lock(mMutexImgFrameListChanges);
+        mlNewImgFramesBuffer.push_back(pNewImgFrame);
+        std::cout << "Added new ImgFrame in ROS script" << std::endl;
+
+    }
+
+    //Pass any new frame to System
+    PassImage();
     return true;
 }
 
+void ImageGrabber::PassImage() {
+    unique_lock<mutex> lock(mMutexImgFrameListChanges);
+    while(!mlNewImgFramesBuffer.empty()) {
+        if (mpSLAM->GetAcceptingNewImgFrames()) {
+            std::cout << "Passing image to System" << std::endl;
+            ImgFrame *pCurrentImgFrame = mlNewImgFramesBuffer.front();
+            mpSLAM->InsertImgFrame(pCurrentImgFrame);
+            mlNewImgFramesBuffer.pop_front();
+        }else{
+            break;
+        }
+    }
+}
 

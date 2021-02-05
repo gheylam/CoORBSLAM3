@@ -6640,7 +6640,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF,vector<KeyFrame*> vpAdju
             if(bShowImages)
             {
                 string strNameFile = pKFi->mNameFile;
-                cv::Mat imLeft = cv::imread(strNameFile, CV_LOAD_IMAGE_UNCHANGED);
+                cv::Mat imLeft = cv::imread(strNameFile, cv::IMREAD_UNCHANGED);
 
                 cv::cvtColor(imLeft, imLeft, CV_GRAY2BGR);
 

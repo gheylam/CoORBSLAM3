@@ -42,7 +42,7 @@ int main(int argc, char **argv){
     ros::Rate rate(10);
     int nImageNum = 0;
     while(ros::ok() && (nImageNum < vsFileNames.size())){
-        mImage = cv::imread(vsFileNames[nImageNum], CV_LOAD_IMAGE_UNCHANGED);
+        mImage = cv::imread(vsFileNames[nImageNum], cv::IMREAD_UNCHANGED);
         if(mImage.empty()){
             ROS_ERROR_STREAM("Could not open or find the image at: " << vsFileNames[nImageNum]);
             ros::shutdown();
