@@ -23,13 +23,17 @@
  */
 
 int main(int argc, char **argv){
-    //TODO make rosnode init name unique to AgentId
-  ros::init(argc, argv, "agent");
-  ros::NodeHandle nh;
-  ros::ServiceClient client = nh.serviceClient<CoORBSLAM3::NewAgentFeed>("new_agent_feed");
-  CoORBSLAM3::NewAgentFeed srv;
 
-  ROS_INFO_STREAM("CV VERSION " << CV_MAJOR_VERSION);
+    ROS_INFO_STREAM("CV VERSION " << CV_MAJOR_VERSION);
+  if(argc < 2){
+      std::cout << "Incorrect number of arguments provided" << std::endl;
+      std::cout << "agent_image <AgentId>"
+  }
+  cv::String sThisNode = "agent_" + argv[1];
+  ros::init(argc, argv, sThisNode.c_str());
+  ros::NodeHandle pNodeHandle;
+  ros::ServiceClient client = pNodeHandle.serviceClient<CoORBSLAM3::NewAgentFeed>("new_agent_feed");
+  CoORBSLAM3::NewAgentFeed srv;
 
   //Load in all the images from the dataset
   std::cout << "Loading dataset, might take awhile..." << std::endl;
@@ -46,7 +50,7 @@ int main(int argc, char **argv){
   cv::Mat mImage;
 
   //TODO Assign the AgentId through the commandline argument
-  srv.request.nAgentID = 1997;
+  srv.request.nAgentID = std::stoi(argv[1]);
 
   //Feed data at 20Hz (Could be adjusted)
   ros::Rate rate(20);
