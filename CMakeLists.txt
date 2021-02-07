@@ -84,8 +84,8 @@ include_directories(
 ## Generate services in the 'srv' folder
 add_service_files(
    FILES
-   AddTwoInts.srv
    NewAgentFeed.srv
+   NewAgentRequest.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -211,8 +211,8 @@ set(EXTERNAL_LIBRARIES
 ###########
 
 ## Setting build locations
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/debug)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/release)
+#set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/debug)
+#set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/release)
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
@@ -281,6 +281,3 @@ add_executable(agent_node src/AgentNode.cpp)
 target_link_libraries(agent_node ${catkin_LIBRARIES} ${OpenCV_LIBS})
 add_dependencies(agent_node CoORBSLAM3_generate_messages_cpp CoORBSLAM3_gencpp)
 
-add_executable(add_two_ints_client src/add_two_ints_client.cpp)
-target_link_libraries(add_two_ints_client ${catkin_LIBRARIES})
-add_dependencies(add_two_ints_client CoORBSLAM3_gencpp)

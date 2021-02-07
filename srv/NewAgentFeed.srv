@@ -1,3 +1,5 @@
+# This message is for encapsulating a single Image Frame
+# Sent from the Agent to the Server after they are connected
 std_msgs/Header header
 int64 nAgentID
 sensor_msgs/Image sImageMsg
