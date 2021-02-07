@@ -25,23 +25,43 @@
 int main(int argc, char **argv){
 
     ROS_INFO_STREAM("CV VERSION " << CV_MAJOR_VERSION);
-  if(argc < 2){
-      std::cout << "Incorrect number of arguments provided" << std::endl;
-      std::cout << "agent_image <AgentId>"
+  if(argc < 3){
+      ROS_ERROR("Incorrect number of arguments provided for agent_image");
+      std::cout << "agent_image <AgentId> <Path to Image Frames /*.png>" << std::endl;
+      return 1;
   }
-  cv::String sThisNode = "agent_" + argv[1];
+  cv::String sThisNode = "agent_" + cv::String(argv[1]);
   ros::init(argc, argv, sThisNode.c_str());
+
+  cv::String sInitMsg = "Agent: " + sThisNode + " Initialized";
+  ROS_INFO(sInitMsg.c_str());
   ros::NodeHandle pNodeHandle;
   ros::ServiceClient client = pNodeHandle.serviceClient<CoORBSLAM3::NewAgentFeed>("new_agent_feed");
   CoORBSLAM3::NewAgentFeed srv;
 
   //Load in all the images from the dataset
-  std::cout << "Loading dataset, might take awhile..." << std::endl;
   std::vector<cv::String> vsFileNames;
 
-  //TODO get filepath directory from commandline arugments
-  cv::String sDatasetPath = "/home/gheylam/orb_slam/datasets/MH01/mav0/cam0/data/*.png";
+  //TODO get filepath directory from commandline arugments [DONE]
+  cv::String sArgPath = argv[2];
+  int nLastCharIndex = sArgPath.length() - 1;
+  if (sArgPath[nLastCharIndex] != '/'){
+      sArgPath = sArgPath + "/*.png";
+  }else{
+      sArgPath = sArgPath + "*.png";
+  }
+  std::cout << sArgPath.c_str() << std::endl;
+  cv::String sDatasetPath = sArgPath;
+  std::cout << sDatasetPath << std::endl;
+
+  std::cout << "Loading dataset, might take awhile..." << std::endl;
   cv::glob(sDatasetPath, vsFileNames, false);
+  //Validate whether the path was correct
+  if(vsFileNames.empty()){
+      cv::String sBadPath = "No PNGs found at: " + sDatasetPath;
+      ROS_ERROR(sBadPath.c_str());
+      return 1;
+  }
   std::cout << "Finished loading dataset" << std::endl;
 
   //create a cv to imgptr converter
@@ -49,7 +69,7 @@ int main(int argc, char **argv){
   sensor_msgs::Image msgImage;
   cv::Mat mImage;
 
-  //TODO Assign the AgentId through the commandline argument
+  //TODO Assign the AgentId through the commandline argument [DONE]
   srv.request.nAgentID = std::stoi(argv[1]);
 
   //Feed data at 20Hz (Could be adjusted)
@@ -72,11 +92,12 @@ int main(int argc, char **argv){
 
       if(client.call(srv)){
           ROS_INFO("Ack: %1d", (long int)srv.response.ack);
+          nImageNum++;
       }else{
-          ROS_ERROR("Failed to call service new_agent_feed");
-          return 1;
+          ROS_ERROR("Failed to reach Server");
+          //TODO Make the agent retry periodically
+          usleep(1000000);
       }
       rate.sleep();
-      nImageNum++;
   }
 }

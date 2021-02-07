@@ -17,7 +17,7 @@ else()
     message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
 endif()
 
-find_package(OpenCV 4)
+find_package(OpenCV 4 REQUIRED)
 if(NOT OpenCV_FOUND)
     find_package(OpenCV 2.4.3 QUIET)
     if(NOT OpenCV_FOUND)
@@ -44,6 +44,7 @@ find_package(catkin REQUIRED COMPONENTS
         image_transport
         cv_bridge
         sensor_msgs
+        OpenCV
         )
 
 MESSAGE("EIGEN INCLUDE PATH:")
@@ -52,9 +53,11 @@ MESSAGE("Pangolin INLUCDE PATH:")
 MESSAGE(${Pangolin_INCLUDE_DIRS})
 
 MESSAGE("CATKIN GLOBAL BIN DEST")
-MESSAGE("OPENCV DIR")
-MESSAGE(${OpenCV_INCLUDE_DIRS})
-
+message(STATUS "OpenCV library status:")
+message(STATUS "config: ${OpenCV_DIR}")
+message(STATUS "version: ${OpenCV_VERSION}")
+message(STATUS "libraries: ${OpenCV_LIBRARIES}")
+message(STATUS "include path: ${OpenCV_INCLUDE_DIRS}")
 include_directories(
         ${PROJECT_SOURCE_DIR}
         ${PROJECT_SOURCE_DIR}/include
@@ -206,6 +209,10 @@ set(EXTERNAL_LIBRARIES
 ###########
 ## Build ##
 ###########
+
+## Setting build locations
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/debug)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/release)
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
