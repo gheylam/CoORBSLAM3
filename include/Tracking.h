@@ -24,7 +24,6 @@
 #include<opencv2/features2d/features2d.hpp>
 #include <opencv2/video/tracking.hpp>
 
-#include"ClientPO.h"
 #include"Viewer.h"
 #include"FrameDrawer.h"
 #include"Atlas.h"
@@ -248,9 +247,6 @@ protected:
     // Initalization (only for monocular)
     Initializer* mpInitializer;
     bool mbSetInit;
-
-    //Client Post Office
-    ClientPO* mpClientPO;
 
     //AgentID
     int mnAgentID;

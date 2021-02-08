@@ -196,7 +196,7 @@ bool ParseParamFile(CoORBSLAM3::NewAgentRequest& srv, cv::String sPath){
 
     node = fSettings["Viewer.KeyFrameLineWidth"];
     if(!node.empty() && node.isInt()){
-        srv.request.dKeyFrameLineWidth = node.operator int();
+        srv.request.nKeyFrameLineWidth = node.operator int();
     }else{
         ROS_ERROR("Viewer.KeyFrameLineWidth parameter doesn't exist or is not an integer");
         return false;
@@ -228,7 +228,7 @@ bool ParseParamFile(CoORBSLAM3::NewAgentRequest& srv, cv::String sPath){
 
     node = fSettings["Viewer.CameraLineWidth"];
     if(!node.empty() && node.isInt()){
-        srv.request.dCameraLineWidth = node.operator int();
+        srv.request.nCameraLineWidth = node.operator int();
     }else{
         ROS_ERROR("Viewer.CameraLineWidth parameter doesn't exist or is not an integer");
         return false;
@@ -279,6 +279,16 @@ int main(int argc, char **argv){
       std::cout << "agent_image <AgentId> <Path to Image Frames> <Path to Param file>" << std::endl;
       return 1;
   }
+
+  //Check if agentID is an integer
+  int nAgentId;
+  try{
+      nAgentId = std::stoi(argv[1]);
+  }catch(...){
+      ROS_ERROR("AgentId passed is not an integer, please use an integer");
+      return 1;
+  }
+
   cv::String sThisNode = "agent_" + cv::String(argv[1]);
   ros::init(argc, argv, sThisNode.c_str());
 
@@ -293,16 +303,29 @@ int main(int argc, char **argv){
       ROS_ERROR("Failed to parse parameter file");
       return 1;
   }
-  std::cout << srvNewAgentReq.request.dCameraSize << std::endl;
+  //Send a request to server to add this agent as part of the SLAM operation
+  srvNewAgentReq.request.header.stamp = ros::Time::now();
+  srvNewAgentReq.request.nAgentId = nAgentId;
+
+  if(clientNewAgent.call(srvNewAgentReq)){
+      bool bSuccess = (bool)srvNewAgentReq.response.bCreated;
+      if(bSuccess){
+          ROS_INFO("Agent has joined the SLAM operation.");
+      }else{
+          ROS_INFO("Agent has failed to join the SLAM operation.");
+          return 1;
+      }
+  }else{
+        ROS_ERROR("Failed to reach Server, shutting down");
+        return 1;
+  }
 
   //Service for passing new image frames to the server
   ros::ServiceClient clientNewImg = pNodeHandle.serviceClient<CoORBSLAM3::NewAgentFeed>("new_agent_feed");
-
   CoORBSLAM3::NewAgentFeed srv;
 
   //Load in all the images from the dataset
   std::vector<cv::String> vsFileNames;
-
   //TODO get filepath directory from commandline arugments [DONE]
   cv::String sArgPath = argv[2];
   int nLastCharIndex = sArgPath.length() - 1;
@@ -360,9 +383,9 @@ int main(int argc, char **argv){
           ROS_INFO("Ack: %1d", (long int)srv.response.ack);
           nImageNum++;
       }else{
-          ROS_ERROR("Failed to reach Server");
-          //TODO Make the agent retry periodically
-          usleep(1000000);
+          ROS_ERROR("Failed to reach Server, trying again in 5 seconds");
+          //TODO Make the agent retry periodically [DONE]
+          usleep(5000000);
       }
       rate.sleep();
   }

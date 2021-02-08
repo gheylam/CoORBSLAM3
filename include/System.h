@@ -29,7 +29,6 @@
 #include<thread>
 #include<opencv2/core/core.hpp>
 
-#include "ClientPO.h"
 #include "Tracking.h"
 #include "FrameDrawer.h"
 #include "MapDrawer.h"
@@ -42,6 +41,9 @@
 #include "ImuTypes.h"
 
 #include "ImgFrame.h"
+#include "Agent.h"
+#include <ros/ros.h>
+#include "CoORBSLAM3/NewAgentRequest.h"
 
 
 namespace ORB_SLAM3
@@ -130,6 +132,10 @@ public:
     void ProcessNewImgFrame();
     void InsertImgFrame(ImgFrame *pImgFrame);
     bool GetAcceptingNewImgFrames();
+
+    bool AcceptNewAgent();
+    void SetAcceptNewAgent(bool flag);
+    void AddNewAgent(Agent *pNewAgent);
 
     // This stops local mapping thread (map building) and performs only camera tracking.
     void ActivateLocalizationMode();
@@ -229,8 +235,6 @@ private:
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
 
-    ClientPO* mpClientPO;
-
     // System threads: Local Mapping, Loop Closing, Viewer.
     // The Tracking thread "lives" in the main execution thread that creates the System object.
     std::thread* mptLocalMapping;
@@ -253,10 +257,6 @@ private:
     std::vector<cv::KeyPoint> mTrackedKeyPointsUn;
     std::mutex mMutexState;
 
-    //Agent bookkeeping
-    std::vector<int> mAgentIds;
-    int mNextAgentId;
-
     //CoORBSLAM
     bool mbFinished;
     bool mbAcceptImgFrames;
@@ -264,6 +264,13 @@ private:
     std::mutex mMutexAccept;
     std::mutex mMutexFinish;
     std::list<ImgFrame*> mlNewImgFrames;
+
+    bool mbAcceptAgent;
+
+    //CoORBSLAM Agent bookkeeping
+    std::vector<int> mvAgentIds;
+    int mNextAgentId;
+
 
 };
 

@@ -139,7 +139,6 @@ add_library(
         src/OptimizableTypes.cpp
         src/MLPnPsolver.cpp
         src/TwoViewReconstruction.cc
-        src/ClientPO.cpp
 
         ## Header files
         include/System.h
@@ -170,8 +169,7 @@ add_library(
         include/OptimizableTypes.h
         include/MLPnPsolver.h
         include/TwoViewReconstruction.h
-        include/ClientPO.h
-        src/ImgFrame.cpp include/ImgFrame.h)
+        src/ImgFrame.cpp include/ImgFrame.h src/Agent.cpp include/Agent.h)
 
 set(THIRDPARTY_LIBS
         ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
@@ -264,14 +262,6 @@ target_link_libraries(${PROJECT_NAME}
 add_executable(CoORBSLAM3_mono src/corbslam3_mono.cpp)
 target_link_libraries(CoORBSLAM3_mono ${PROJECT_NAME})
 add_dependencies(CoORBSLAM3_mono CoORBSLAM3_generate_messages_cpp CoORBSLAM3_gencpp)
-
-add_executable(agent src/agent.cpp)
-target_link_libraries(agent ${catkin_LIBRARIES})
-add_dependencies(agent CoORBSLAM3_generate_messages_cpp)
-
-add_executable(server src/server.cpp)
-target_link_libraries(server ${catkin_LIBRARIES})
-add_dependencies(server CoORBSLAM3_generate_messages_cpp)
 
 add_executable(agent_image src/agent_image.cpp)
 target_link_libraries(agent_image ${catkin_LIBRARIES} ${OpenCV_LIBS})

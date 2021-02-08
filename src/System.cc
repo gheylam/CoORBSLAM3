@@ -156,16 +156,18 @@ void System::Run(){
     while(1)
     {
         //ROS component will see that System is busy
+        SetAcceptNewAgent(false);
         SetAcceptImgFrames(false);
 
         //Check if there are new Image Frames in the queue
         if(CheckNewImgFrames()){
-            std::cout << "New Image Frames found" << std::endl;
+            //std::cout << "New Image Frames found" << std::endl;
             //If there is a new KeyFrame then we process it
             ProcessNewImgFrame();
         }else{
-            std::cout << "No New Image Frames found" << std::endl;
+            //std::cout << "No New Image Frames found" << std::endl;
         }
+        SetAcceptNewAgent(true);
         SetAcceptImgFrames(true);
         usleep(10000);
     }
@@ -199,6 +201,32 @@ bool System::GetAcceptingNewImgFrames(){
     unique_lock<mutex> lock(mMutexAccept);
     return mbAcceptImgFrames;
 }
+
+void System::SetAcceptNewAgent(bool flag){
+    mbAcceptAgent = flag;
+}
+
+bool System::AcceptNewAgent(){
+    if(mbAcceptAgent == true){
+        return true;
+    }else{
+        return false;
+    }
+}
+
+void System::AddNewAgent(Agent *pNewAgent){
+    int nAgentId = pNewAgent->GetId();
+    std::vector<int>::iterator nIndex = std::find(mvAgentIds.begin(), mvAgentIds.end(), nAgentId);
+    if(nIndex != mvAgentIds.end()){
+        std::cout << "SYSTEM | Agent rejoining SLAM operation" << std::endl;
+        //TODO Wake up the dormant Agent back into the round robin
+    }else{
+        std::cout << "SYSTEM | New Agent: " << nAgentId
+        << " joining the SLAM operation" << std::endl;
+        mvAgentIds.push_back(nAgentId);
+    }
+}
+
 
 
 cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp, const vector<IMU::Point>& vImuMeas, string filename)
