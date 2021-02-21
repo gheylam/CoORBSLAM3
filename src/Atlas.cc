@@ -118,13 +118,19 @@ void Atlas::CreateNewMap(int nAgentId)
     if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
         cout << "New AgentID found" << endl;
         mMapAgentMap.insert(pair<int, Map*>(nAgentId, mpCurrentMap));
+        std::vector<Map*> vAgentMaps;
+        vAgentMaps.push_back(mpCurrentMap);
+        mMapAgentMapVector.insert(pair<int, std::vector<Map*>>(nAgentId, vAgentMaps));
         //Also insert new accumulator for how many maps there are;
         mMapNumAgentMaps.insert(pair<int, int>(nAgentId, 1));
     }else{
         cout << "Existing AgentID found" << endl;
         mMapAgentMap[nAgentId] = mpCurrentMap;
+        //Append the new map into the agent vector of maps
+        mMapAgentMapVector[nAgentId].push_back(mpCurrentMap);
         //Also update how many maps there are for each agentId
         mMapNumAgentMaps[nAgentId] += 1;
+
     }
 }
 
@@ -234,6 +240,8 @@ long unsigned int Atlas::MapPointsInMap()
 
 long unsigned int Atlas::MapPointsInMap(int nAgentId)
 {
+    //This returns the number of map points in the map
+    //In comparison, GetAllMapPoints returns a vector containing all the map poitns instead.
     unique_lock<mutex> lock(mMutexAtlas);
     if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
         std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
@@ -332,6 +340,21 @@ vector<Map*> Atlas::GetAllMaps()
     return vMaps;
 }
 
+vector<Map*> Atlas::GetAllAgentMaps(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    struct compFunctor
+    {
+        inline bool operator()(Map* elem1 ,Map* elem2)
+        {
+            return elem1->GetId() < elem2->GetId();
+        }
+    };
+    vector<Map*> vMaps(mMapAgentMapVector[nAgentId].begin(),mMapAgentMapVector[nAgentId].end());
+    sort(vMaps.begin(), vMaps.end(), compFunctor());
+    return vMaps;
+}
+
 long unsigned Atlas::GetAgentMapCount(int nAgentId)
 {
     unique_lock<mutex> lock(mMutexAtlas);
@@ -377,8 +400,9 @@ void Atlas::clearAtlas()
         delete *it;
     }*/
     mspMaps.clear();
-    for(int nAgentMapEntry = 0; nAgentMapEntry < mMapAgentMap.size(); nAgentMapEntry++){
-        mMapAgentMap[nAgentMapEntry] = static_cast<Map*>(NULL);
+    map<int, Map*>::iterator it;
+    for(it = mMapAgentMap.begin(); it != mMapAgentMap.end(); it++){
+        it->second = static_cast<Map*>(NULL);
     }
     mpCurrentMap = static_cast<Map*>(NULL);
     mnLastInitKFidMap = 0;
@@ -399,20 +423,20 @@ Map* Atlas::GetCurrentMap(int nAgentId)
     unique_lock<mutex> lock(mMutexAtlas);
     //std::lock_guard<std::recursive_mutex> lock(mRMutexAtlas);
     //Get the CurrentMap pointer that corresponds with the given AgentId
-    std::cout << "ATLAS | In Atlas::GetCurrentMap(int nAgentId)" << std::endl;
+    //std::cout << "ATLAS | In Atlas::GetCurrentMap(int nAgentId)" << std::endl;
     if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
-        std::cout << "ATLAS | CurrentMap for ID not found, creating new map" << std::endl;
+        std::cout << "ATLAS | CurrentMap for ID not found, abort" << std::endl;
+        //CreateNewMap(nAgentId); This behaviour to create a new map when the agent doens't exist is wrong
+        exit(1);
+    }else{
+        //std::cout << "ATLAS | CurrentMap found for AgentId: " << nAgentId << std::endl;
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
+    if(!mpCurrentMap) {
         std::cout << "ATLAS | In Atlas::GetCurrentMap(int nAgentId) Entering CreateNewMap()" << std::endl;
         CreateNewMap(nAgentId);
         std::cout << "ATLAS | In Atlas::GetCurrentMap(int nAgentId) Finished creating a new map" << std::endl;
-    }else{
-        std::cout << "ATLAS | CurrentMap found for AgentId: " << nAgentId << std::endl;
-        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
     }
-    //if(!mpCurrentMap)
-    //    std::cout << "ATLAS | In Atlas::GetCurrentMap(int nAgentId) Entering CreateNewMap()" << std::endl;
-    //    CreateNewMap(nAgentId);
-    //    std::cout << "ATLAS | In Atlas::GetCurrentMap(int nAgentId) Finished creating a new map" << std::endl;
     while(mpCurrentMap->IsBad())
         usleep(3000);
     return mpCurrentMap;

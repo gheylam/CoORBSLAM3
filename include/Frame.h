@@ -49,8 +49,11 @@ class Frame
 public:
     Frame();
 
+    Frame(int nAgentId);
+
     // Copy constructor.
     Frame(const Frame &frame);
+    Frame(int nAgentId, const Frame &frame);
 
     // Constructor for stereo cameras.
     Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeStamp, ORBextractor* extractorLeft, ORBextractor* extractorRight, ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, GeometricCamera* pCamera,Frame* pPrevF = static_cast<Frame*>(NULL), const IMU::Calib &ImuCalib = IMU::Calib());

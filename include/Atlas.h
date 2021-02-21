@@ -118,6 +118,7 @@ public:
     std::vector<MapPoint*> GetReferenceMapPoints(int nAgentId);
 
     vector<Map*> GetAllMaps();
+    vector<Map*> GetAllAgentMaps(int nAgentId);
     long unsigned GetAgentMapCount(int nAgentId);
 
     int CountMaps();
@@ -165,6 +166,7 @@ protected:
     //Agent related context members
     Agent* mpCurrentAgent;
     std::map<int, Map*> mMapAgentMap;
+    std::map<int, std::vector<Map*>> mMapAgentMapVector;
     std::map<int, unsigned long int> mMapAgentLastInitFKidMap;
     std::map<int, int> mMapNumAgentMaps; //This member is created solely for aiding tracking initialization
     //Member variables that need to correspond to a unique agent

@@ -95,6 +95,8 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
     SetPose(F.mTcw);
 
     mnOriginMapId = pMap->GetId();
+
+
 }
 
 void KeyFrame::ComputeBoW()
