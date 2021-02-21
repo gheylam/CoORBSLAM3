@@ -384,6 +384,9 @@ public:
 
     bool bImu;
 
+    //CoORBSLAM3 Related
+    int GetAgentId();
+
     // The following variables are accesed from only 1 thread or never change (no mutex needed).
 public:
 
@@ -575,6 +578,8 @@ protected:
     // Backup for Cameras
     unsigned int mnBackupIdCamera, mnBackupIdCamera2;
 
+    //CoORBSLAM3 related
+    int mnAgentId;
 public:
     GeometricCamera* mpCamera, *mpCamera2;
 

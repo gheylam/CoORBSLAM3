@@ -49,6 +49,31 @@ Viewer::Viewer(System* pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer
     mbStopTrack = false;
 }
 
+Viewer::Viewer(System* pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Tracking *pTracking, Agent* pAgent):
+        both(false), mpSystem(pSystem), mpFrameDrawer(pFrameDrawer),mpMapDrawer(pMapDrawer), mpTracker(pTracking),
+        mbFinishRequested(false), mbFinished(true), mbStopped(true), mbStopRequested(false)
+{
+
+    bool is_correct = GetAgentViewerParams(pAgent);
+
+    if(!is_correct)
+    {
+        std::cerr << "**ERROR in the config file, the format is not correct**" << std::endl;
+        try
+        {
+            throw -1;
+        }
+        catch(exception &e)
+        {
+
+        }
+    }
+
+    mbStopTrack = false;
+}
+
+
+
 bool Viewer::ParseViewerParamFile(cv::FileStorage &fSettings)
 {
     bool b_miss_params = false;
@@ -127,8 +152,25 @@ bool Viewer::ParseViewerParamFile(cv::FileStorage &fSettings)
     return !b_miss_params;
 }
 
+bool Viewer::GetAgentViewerParams(Agent* pAgent){
+    float fps = pAgent->GetFPS();
+    if(fps<1)
+        fps=30;
+    mT = 1e3/fps;
+
+    mImageWidth = pAgent->GetCameraWidth();
+    mImageHeight = pAgent->GetCameraHeight();
+    mViewpointX = (float)pAgent->GetViewpointX();
+    mViewpointY = (float)pAgent->GetViewpointY();
+    mViewpointZ = (float)pAgent->GetViewpointZ();
+    mViewpointF = (float)pAgent->GetViewpointF();
+
+    return true;
+}
+
 void Viewer::Run()
 {
+    std::cout << "Viewer::Run() | Start of Run()" << std::endl;
     mbFinished = false;
     mbStopped = false;
 
@@ -184,9 +226,27 @@ void Viewer::Run()
         menuShowGraph = true;
     }
 
+
+
+    //Stall viewer until tracker gets a tracker context
+    //This is the fix a bug where Tracker has yet to assign mpCurrentMap yet in Atlas
+    //So when MapDrawer tries to get all the KeyFrames from atlas using mpAtlas->GetAllKeyFrames()
+    //It returns an empty pointer
+
+    bool bTrackerReady = false;
+    while(!bTrackerReady){
+        int nNumTrackersInAtlas = mpMapDrawer->mpAtlas->GetNumAgentContext();
+
+        if(nNumTrackersInAtlas > 0){
+            bTrackerReady = true;
+        }
+        usleep(3000);
+    }
+
     while(1)
     {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
 
         mpMapDrawer->GetCurrentOpenGLCameraMatrix(Twc,Ow,Twwp);
 
@@ -284,15 +344,22 @@ void Viewer::Run()
         d_cam.Activate(s_cam);
         glClearColor(1.0f,1.0f,1.0f,1.0f);
         mpMapDrawer->DrawCurrentCamera(Twc);
-        if(menuShowKeyFrames || menuShowGraph || menuShowInertialGraph)
-            mpMapDrawer->DrawKeyFrames(menuShowKeyFrames,menuShowGraph, menuShowInertialGraph);
-        if(menuShowPoints)
+
+        if(menuShowKeyFrames || menuShowGraph || menuShowInertialGraph) {
+            mpMapDrawer->DrawKeyFrames(menuShowKeyFrames, menuShowGraph, menuShowInertialGraph);
+
+        }
+        if(menuShowPoints) {
             mpMapDrawer->DrawMapPoints();
+
+        }
+
 
         pangolin::FinishFrame();
 
         cv::Mat toShow;
         cv::Mat im = mpFrameDrawer->DrawFrame(true);
+
 
         if(both){
             cv::Mat imRight = mpFrameDrawer->DrawRightFrame();
@@ -332,6 +399,8 @@ void Viewer::Run()
 
         if(CheckFinish())
             break;
+
+
     }
 
     SetFinish();

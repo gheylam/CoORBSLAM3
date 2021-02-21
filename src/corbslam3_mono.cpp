@@ -29,8 +29,10 @@
 #include<opencv2/core/core.hpp>
 #include"../include/System.h"
 #include"../include/ImgFrame.h"
-#include "CoORBSLAM3/AddTwoInts.h"
+#include"../include/Agent.h"
 #include "CoORBSLAM3/NewAgentFeed.h"
+#include "CoORBSLAM3/NewAgentRequest.h"
+
 
 using namespace std;
 
@@ -44,6 +46,9 @@ public:
     //ROS service callback equivalent to existing subscriber callback.
     bool GrabImageSrv(CoORBSLAM3::NewAgentFeed::Request &req,
                    CoORBSLAM3::NewAgentFeed::Response &res);
+
+    bool GrabNewAgent(CoORBSLAM3::NewAgentRequest::Request &req,
+                      CoORBSLAM3::NewAgentRequest::Response &res);
 
     //Transfers buffered image frames over to System
     void PassImage();
@@ -62,7 +67,7 @@ int startSystem = 0; //Evaluates whether the System thread has started
 std::thread ptSystem;
 
 int main(int argc, char **argv) {
-    ros::init(argc, argv, "Mono_Agent");
+    ros::init(argc, argv, "CoORBSLAM_Server");
     ros::start();
 
     if (argc != 3) {
@@ -84,9 +89,10 @@ int main(int argc, char **argv) {
         ROS_INFO("System started");
     }
 
-    //Initialize the ROS service
+    //Initialize the ROS services
+    ros::ServiceServer serviceNewAgent = nodeHandler.advertiseService("new_agent_request", &ImageGrabber::GrabNewAgent, &igb);
     ros::ServiceServer service = nodeHandler.advertiseService("new_agent_feed", &ImageGrabber::GrabImageSrv, &igb);
-    ROS_INFO("Ready to grab images");
+    ROS_INFO("Services are ready");
 
     //Removed subscriber for more confident ROS Service communication channel
     //ros::Subscriber sub = nodeHandler.subscribe("/camera/image_raw", 1, &ImageGrabber::GrabImage,&igb);
@@ -161,3 +167,33 @@ void ImageGrabber::PassImage() {
     }
 }
 
+//Inserts a new agent into System and awaits for System's
+//response after System adds the agent into the SLAM operation
+bool ImageGrabber::GrabNewAgent(CoORBSLAM3::NewAgentRequest::Request &req,
+                                  CoORBSLAM3::NewAgentRequest::Response &res){
+    //Inform System that a new Agent would like to join the SLAM operation
+    double fStartTime = ros::Time::now().toSec();
+    double fTimeElapsed = ros::Time::now().toSec() - fStartTime;
+    //Create a new Agent instance that we will pass onto System
+    Agent *pNewAgent = new Agent(req.nAgentId, req.header.stamp.toSec());
+    pNewAgent->SetCameraParams(cv::String(req.sCameraType), (double)req.fx, (double)req.fy, (double)req.cx,
+                               (double)req.cy, (double)req.k1, (double)req.k2, (double)req.p1, (double)req.p2, (int)req.nCameraWidth,
+                               (int)req.nCameraHeight, (double)req.fps, (int)req.RGB);
+    pNewAgent->SetORBExtractorParams(int(req.nFeatures), double(req.dScaleFactor), int(req.nLevels),
+                                     int(req.nIniThFAST), int(req.nMinThFAST));
+    pNewAgent->SetViewerParams(double(req.dKeyFrameSize), int(req.nKeyFrameLineWidth), double(req.dGraphLineWidth),
+                               int(req.nPointSize), double(req.dCameraSize), int(req.nCameraLineWidth),
+                               double(req.dViewpointX), double(req.dViewpointY), double(req.dViewpointZ),
+                               double(req.dViewpointF));
+    while(fTimeElapsed < 5) {
+        if (mpSLAM->AcceptNewAgent()) {
+            mpSLAM->AddNewAgent(pNewAgent);
+            res.bCreated = true;
+            return true;
+        }
+        fTimeElapsed = ros::Time::now().toSec() - fStartTime;
+    }
+    res.bCreated = false;
+    ROS_INFO("Adding agent timed out...");
+    return true;
+}

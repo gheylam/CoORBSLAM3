@@ -33,7 +33,7 @@ Atlas::Atlas(){
 Atlas::Atlas(int initKFid): mnLastInitKFidMap(initKFid), mHasViewer(false)
 {
     mpCurrentMap = static_cast<Map*>(NULL);
-    CreateNewMap();
+    //CreateNewMap(); This is delayed until the first Image Frames come in
 }
 
 Atlas::~Atlas()
@@ -77,7 +77,9 @@ void Atlas::CreateNewMap()
     mspMaps.insert(mpCurrentMap);
 }
 
-void Atlas::CreateNewMap(int nAgentID)
+
+
+void Atlas::CreateNewMap(int nAgentId)
 {
     /*
      * Overloaded for CoORBSLAM
@@ -85,8 +87,18 @@ void Atlas::CreateNewMap(int nAgentID)
      * the agent that is creating it.
      */
     unique_lock<mutex> lock(mMutexAtlas);
+    //std::lock_guard<std::recursive_mutex> lock(mRMutexAtlas);
+    std::cout << "ATLAS | In Atlas::CreateNewMap(int nAgentId)" << std::endl;
+    //First we will attempt to set mpCurrentMap to the AgentId
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | No map exists for agent: " << nAgentId << " in CreateNewMap()" << std::endl;
+        mpCurrentMap = static_cast<Map*>(NULL);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
+
     cout << "Creation of new map with id: " << Map::nNextId << endl;
-    cout << "Map created for Agent: " << nAgentID;
+    cout << "Map created for Agent: " << nAgentId << endl;
     if(mpCurrentMap){
         cout << "Exits current map " << endl;
         if(!mspMaps.empty() && mnLastInitKFidMap < mpCurrentMap->GetMaxKFid())
@@ -103,12 +115,22 @@ void Atlas::CreateNewMap(int nAgentID)
     mpCurrentMap->SetCurrentMap();
     mspMaps.insert(mpCurrentMap);
     //Add the association between this new map and agentId
-    if(mmAgentMaps.find(nAgentID) == mmAgentMaps.end()){
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
         cout << "New AgentID found" << endl;
-        mmAgentMaps.insert(pair<int, Map*>(nAgentID, mpCurrentMap));
+        mMapAgentMap.insert(pair<int, Map*>(nAgentId, mpCurrentMap));
+        std::vector<Map*> vAgentMaps;
+        vAgentMaps.push_back(mpCurrentMap);
+        mMapAgentMapVector.insert(pair<int, std::vector<Map*>>(nAgentId, vAgentMaps));
+        //Also insert new accumulator for how many maps there are;
+        mMapNumAgentMaps.insert(pair<int, int>(nAgentId, 1));
     }else{
         cout << "Existing AgentID found" << endl;
-        mmAgentMaps[nAgentID] = mpCurrentMap;
+        mMapAgentMap[nAgentId] = mpCurrentMap;
+        //Append the new map into the agent vector of maps
+        mMapAgentMapVector[nAgentId].push_back(mpCurrentMap);
+        //Also update how many maps there are for each agentId
+        mMapNumAgentMaps[nAgentId] += 1;
+
     }
 }
 
@@ -124,6 +146,7 @@ void Atlas::ChangeMap(Map* pMap)
     mpCurrentMap->SetCurrentMap();
 }
 
+//This mnLastInitKFidMAP is old and no longer used in the new algorithm
 unsigned long int Atlas::GetLastInitKFid()
 {
     unique_lock<mutex> lock(mMutexAtlas);
@@ -156,6 +179,20 @@ void Atlas::AddCamera(GeometricCamera* pCam)
 void Atlas::SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs)
 {
     unique_lock<mutex> lock(mMutexAtlas);
+
+
+    mpCurrentMap->SetReferenceMapPoints(vpMPs);
+}
+
+void Atlas::SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs, int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
     mpCurrentMap->SetReferenceMapPoints(vpMPs);
 }
 
@@ -165,9 +202,33 @@ void Atlas::InformNewBigChange()
     mpCurrentMap->InformNewBigChange();
 }
 
+void Atlas::InformNewBigChange(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
+    mpCurrentMap->InformNewBigChange();
+}
+
 int Atlas::GetLastBigChangeIdx()
 {
     unique_lock<mutex> lock(mMutexAtlas);
+    return mpCurrentMap->GetLastBigChangeIdx();
+}
+
+int Atlas::GetLastBigChangeIdx(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
     return mpCurrentMap->GetLastBigChangeIdx();
 }
 
@@ -177,15 +238,54 @@ long unsigned int Atlas::MapPointsInMap()
     return mpCurrentMap->MapPointsInMap();
 }
 
+long unsigned int Atlas::MapPointsInMap(int nAgentId)
+{
+    //This returns the number of map points in the map
+    //In comparison, GetAllMapPoints returns a vector containing all the map poitns instead.
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
+    return mpCurrentMap->MapPointsInMap();
+}
+
 long unsigned Atlas::KeyFramesInMap()
 {
     unique_lock<mutex> lock(mMutexAtlas);
     return mpCurrentMap->KeyFramesInMap();
 }
 
+long unsigned Atlas::KeyFramesInMap(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
+    return mpCurrentMap->KeyFramesInMap();
+}
+
 std::vector<KeyFrame*> Atlas::GetAllKeyFrames()
 {
     unique_lock<mutex> lock(mMutexAtlas);
+    //std::cout << "Atlas::GetAllKeyFrames() | value of mpCurrentMap: " << mpCurrentMap << std::endl;
+    return mpCurrentMap->GetAllKeyFrames();
+}
+
+std::vector<KeyFrame*> Atlas::GetAllKeyFrames(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
     return mpCurrentMap->GetAllKeyFrames();
 }
 
@@ -195,9 +295,33 @@ std::vector<MapPoint*> Atlas::GetAllMapPoints()
     return mpCurrentMap->GetAllMapPoints();
 }
 
+std::vector<MapPoint*> Atlas::GetAllMapPoints(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
+    return mpCurrentMap->GetAllMapPoints();
+}
+
 std::vector<MapPoint*> Atlas::GetReferenceMapPoints()
 {
     unique_lock<mutex> lock(mMutexAtlas);
+    return mpCurrentMap->GetReferenceMapPoints();
+}
+
+std::vector<MapPoint*> Atlas::GetReferenceMapPoints(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
     return mpCurrentMap->GetReferenceMapPoints();
 }
 
@@ -216,6 +340,33 @@ vector<Map*> Atlas::GetAllMaps()
     return vMaps;
 }
 
+vector<Map*> Atlas::GetAllAgentMaps(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    struct compFunctor
+    {
+        inline bool operator()(Map* elem1 ,Map* elem2)
+        {
+            return elem1->GetId() < elem2->GetId();
+        }
+    };
+    vector<Map*> vMaps(mMapAgentMapVector[nAgentId].begin(),mMapAgentMapVector[nAgentId].end());
+    sort(vMaps.begin(), vMaps.end(), compFunctor());
+    return vMaps;
+}
+
+long unsigned Atlas::GetAgentMapCount(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapNumAgentMaps.find(nAgentId) == mMapNumAgentMaps.end()) {
+        std::cout << "ATLAS: ERROR accessing non existent AgentId in GetAgentMapCount" << std::endl;
+        exit(1);
+    }else{
+        int nAgentMapCount = mMapNumAgentMaps.find(nAgentId)->second;
+        return  nAgentMapCount;
+    }
+}
+
 int Atlas::CountMaps()
 {
     unique_lock<mutex> lock(mMutexAtlas);
@@ -228,6 +379,18 @@ void Atlas::clearMap()
     mpCurrentMap->clear();
 }
 
+void Atlas::clearMap(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
+    mpCurrentMap->clear();
+}
+
 void Atlas::clearAtlas()
 {
     unique_lock<mutex> lock(mMutexAtlas);
@@ -237,16 +400,43 @@ void Atlas::clearAtlas()
         delete *it;
     }*/
     mspMaps.clear();
+    map<int, Map*>::iterator it;
+    for(it = mMapAgentMap.begin(); it != mMapAgentMap.end(); it++){
+        it->second = static_cast<Map*>(NULL);
+    }
     mpCurrentMap = static_cast<Map*>(NULL);
     mnLastInitKFidMap = 0;
 }
 
 Map* Atlas::GetCurrentMap()
 {
-
     unique_lock<mutex> lock(mMutexAtlas);
     if(!mpCurrentMap)
         CreateNewMap();
+    while(mpCurrentMap->IsBad())
+        usleep(3000);
+    return mpCurrentMap;
+}
+
+Map* Atlas::GetCurrentMap(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    //std::lock_guard<std::recursive_mutex> lock(mRMutexAtlas);
+    //Get the CurrentMap pointer that corresponds with the given AgentId
+    //std::cout << "ATLAS | In Atlas::GetCurrentMap(int nAgentId)" << std::endl;
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | CurrentMap for ID not found, abort" << std::endl;
+        //CreateNewMap(nAgentId); This behaviour to create a new map when the agent doens't exist is wrong
+        exit(1);
+    }else{
+        //std::cout << "ATLAS | CurrentMap found for AgentId: " << nAgentId << std::endl;
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
+    if(!mpCurrentMap) {
+        std::cout << "ATLAS | In Atlas::GetCurrentMap(int nAgentId) Entering CreateNewMap()" << std::endl;
+        CreateNewMap(nAgentId);
+        std::cout << "ATLAS | In Atlas::GetCurrentMap(int nAgentId) Finished creating a new map" << std::endl;
+    }
     while(mpCurrentMap->IsBad())
         usleep(3000);
     return mpCurrentMap;
@@ -276,9 +466,33 @@ bool Atlas::isInertial()
     return mpCurrentMap->IsInertial();
 }
 
+bool Atlas::isInertial(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
+    return mpCurrentMap->IsInertial();
+}
+
 void Atlas::SetInertialSensor()
 {
     unique_lock<mutex> lock(mMutexAtlas);
+    mpCurrentMap->SetInertialSensor();
+}
+
+void Atlas::SetInertialSensor(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
     mpCurrentMap->SetInertialSensor();
 }
 
@@ -288,9 +502,33 @@ void Atlas::SetImuInitialized()
     mpCurrentMap->SetImuInitialized();
 }
 
+void Atlas::SetImuInitialized(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
+    mpCurrentMap->SetImuInitialized();
+}
+
 bool Atlas::isImuInitialized()
 {
     unique_lock<mutex> lock(mMutexAtlas);
+    return mpCurrentMap->isImuInitialized();
+}
+
+bool Atlas::isImuInitialized(int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+    }
     return mpCurrentMap->isImuInitialized();
 }
 
@@ -411,14 +649,9 @@ long unsigned int Atlas::GetNumLivedMP() {
     return num;
 }
 
-//Agent related methods
-
-void Atlas::SetAgent(int nAgentID){
-    mnCurrentAgent = nAgentID;
-}
-
-int Atlas::GetCurrentAgent(){
-    return mnCurrentAgent;
+int Atlas::GetNumAgentContext(){
+    unique_lock<mutex> lock(mMutexAtlas);
+    return mMapAgentMap.size();
 }
 
 } //namespace ORB_SLAM3

@@ -49,8 +49,11 @@ class Frame
 public:
     Frame();
 
+    Frame(int nAgentId);
+
     // Copy constructor.
     Frame(const Frame &frame);
+    Frame(int nAgentId, const Frame &frame);
 
     // Constructor for stereo cameras.
     Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeStamp, ORBextractor* extractorLeft, ORBextractor* extractorRight, ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, GeometricCamera* pCamera,Frame* pPrevF = static_cast<Frame*>(NULL), const IMU::Calib &ImuCalib = IMU::Calib());
@@ -60,7 +63,8 @@ public:
 
     // Constructor for Monocular cameras.
     Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, GeometricCamera* pCamera, cv::Mat &distCoef, const float &bf, const float &thDepth, Frame* pPrevF = static_cast<Frame*>(NULL), const IMU::Calib &ImuCalib = IMU::Calib());
-
+    //Constructor for Monocular CoORBSLAM3
+    Frame(int nAgentId, const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, GeometricCamera* pCamera, cv::Mat &distCoef, const float &bf, const float &thDepth, Frame* pPrevF = static_cast<Frame*>(NULL), const IMU::Calib &ImuCalib = IMU::Calib());
     // Destructor
     // ~Frame();
 
@@ -130,6 +134,10 @@ public:
 
     cv::Mat mRwc;
     cv::Mat mOw;
+
+    //CoORBSLAM3 related
+    int GetAgentId();
+
 public:
     // Vocabulary used for relocalization.
     ORBVocabulary* mpORBvocabulary;
@@ -252,6 +260,8 @@ public:
 
 
 private:
+    //CoORBSLAM3 related
+    int mnAgentId; //References the AgentId that the frame came from
 
     // Undistort keypoints given OpenCV distortion parameters.
     // Only for the RGB-D case. Stereo must be already rectified!

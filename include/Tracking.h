@@ -24,7 +24,6 @@
 #include<opencv2/features2d/features2d.hpp>
 #include <opencv2/video/tracking.hpp>
 
-#include"ClientPO.h"
 #include"Viewer.h"
 #include"FrameDrawer.h"
 #include"Atlas.h"
@@ -40,6 +39,7 @@
 #include "ImuTypes.h"
 
 #include "GeometricCamera.h"
+#include "Agent.h"
 
 #include <mutex>
 #include <unordered_set>
@@ -58,8 +58,12 @@ class Tracking
 {  
 
 public:
-    Tracking(System* pSys, int nAgentID, ORBVocabulary* pVoc, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Atlas* pAtlas,
+    Tracking(System* pSys, ORBVocabulary* pVoc, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Atlas* pAtlas,
              KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor, const string &_nameSeq=std::string());
+
+    //Tracking constructor for CoORBSLAM
+    Tracking(System* pSys, Agent* pAgent, ORBVocabulary* pVoc, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Atlas* pAtlas,
+             KeyFrameDatabase* pKFDB, const int sensor, const string &_nameSeq=std::string());
 
     ~Tracking();
 
@@ -67,6 +71,10 @@ public:
     bool ParseCamParamFile(cv::FileStorage &fSettings);
     bool ParseORBParamFile(cv::FileStorage &fSettings);
     bool ParseIMUParamFile(cv::FileStorage &fSettings);
+
+    bool GetAgentCamParam();
+    bool GetAgentORBParam();
+    //bool GetAgentIMUParam(Agent* mpAgent) //TODO implement this when we want to expand the SLAM systems we can use
 
     // Preprocess the input and call Track(). Extract features and performs stereo matching.
     cv::Mat GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp, string filename);
@@ -249,11 +257,10 @@ protected:
     Initializer* mpInitializer;
     bool mbSetInit;
 
-    //Client Post Office
-    ClientPO* mpClientPO;
-
-    //AgentID
-    int mnAgentID;
+    //CoORBSLAM
+    int mnAgentId;
+    Agent* mpAgent;
+    bool mbAgentFirstFrame;
 
     //Local Map
     KeyFrame* mpReferenceKF;

@@ -360,8 +360,6 @@ cv::Mat FrameDrawer::DrawRightFrame()
     return imWithInfo;
 }
 
-
-
 void FrameDrawer::DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText)
 {
     stringstream s;
@@ -428,7 +426,7 @@ void FrameDrawer::Update(Tracking *pTracker)
     //mmMatchedInImage = mCurrentFrame.mmMatchedInImage;
     mmMatchedInImage.clear();
 
-    mvpLocalMap = pTracker->GetLocalMapMPS();
+    mvpLocalMap = pTracker->GetLocalMapMPS(); //Returns the local Map Points
     mvMatchedKeys.clear();
     mvMatchedKeys.reserve(N);
     mvpMatchedMPs.clear();

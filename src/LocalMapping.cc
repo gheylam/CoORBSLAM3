@@ -124,7 +124,7 @@ void LocalMapping::Run()
 
             if(!CheckNewKeyFrames() && !stopRequested())
             {
-                if(mpAtlas->KeyFramesInMap()>2)
+                if(mpAtlas->KeyFramesInMap(mnAgentId)>2)
                 {
                     if(mbInertial && mpCurrentKeyFrame->GetMap()->isImuInitialized())
                     {
@@ -205,7 +205,7 @@ void LocalMapping::Run()
                         }
 
                         // scale refinement
-                        if (((mpAtlas->KeyFramesInMap())<=100) &&
+                        if (((mpAtlas->KeyFramesInMap(mnAgentId))<=100) &&
                                 ((mTinit>25.0f && mTinit<25.5f)||
                                 (mTinit>35.0f && mTinit<35.5f)||
                                 (mTinit>45.0f && mTinit<45.5f)||
@@ -295,6 +295,8 @@ void LocalMapping::ProcessNewKeyFrame()
         unique_lock<mutex> lock(mMutexNewKFs);
         mpCurrentKeyFrame = mlNewKeyFrames.front();
         mlNewKeyFrames.pop_front();
+        mnAgentId = mpCurrentKeyFrame->GetAgentId();
+        std::cout << "LocalMapping::ProcessNewKeyFrame | mnAgentId value: " << mnAgentId << std::endl;
     }
 
     // Compute Bags of Words structures
@@ -705,8 +707,8 @@ void LocalMapping::CreateNewMapPoints()
             if(ratioDist*ratioFactor<ratioOctave || ratioDist>ratioOctave*ratioFactor)
                 continue;
 
-            // Triangulation is succesfull
-            MapPoint* pMP = new MapPoint(x3D,mpCurrentKeyFrame,mpAtlas->GetCurrentMap());
+            // Triangulation is succesful
+            MapPoint* pMP = new MapPoint(x3D,mpCurrentKeyFrame,mpAtlas->GetCurrentMap(mnAgentId));
 
             pMP->AddObservation(mpCurrentKeyFrame,idx1);            
             pMP->AddObservation(pKF2,idx2);
@@ -948,7 +950,8 @@ void LocalMapping::KeyFrameCulling()
     else
         redundant_th = 0.5;
 
-    const bool bInitImu = mpAtlas->isImuInitialized();
+
+    const bool bInitImu = mpAtlas->isImuInitialized(mnAgentId);
     int count=0;
 
     // Compoute last KF from optimizable window:
@@ -1042,7 +1045,7 @@ void LocalMapping::KeyFrameCulling()
         {
             if (mbInertial)
             {
-                if (mpAtlas->KeyFramesInMap()<=Nd)
+                if (mpAtlas->KeyFramesInMap(mnAgentId)<=Nd)
                     continue;
 
                 if(pKF->mnId>(mpCurrentKeyFrame->mnId-2))
@@ -1108,6 +1111,7 @@ void LocalMapping::RequestReset()
             if(!mbResetRequested)
                 break;
         }
+
         usleep(3000);
     }
     cout << "LM: Map reset, Done!!!" << endl;
@@ -1130,6 +1134,9 @@ void LocalMapping::RequestResetActiveMap(Map* pMap)
             if(!mbResetRequestedActiveMap)
                 break;
         }
+        std::cout << "LocalMapping::RequestReset() | in while loop" << std::endl;
+        //Added this in to reset the map
+        //ResetIfRequested(); //I shouldn't need this
         usleep(3000);
     }
     cout << "LM: Active map reset, Done!!!" << endl;
@@ -1137,6 +1144,7 @@ void LocalMapping::RequestResetActiveMap(Map* pMap)
 
 void LocalMapping::ResetIfRequested()
 {
+    //std::cout << "LocalMapping::ResetIfRequested() | Resetting LocalMapping Active Map" << endl;
     bool executed_reset = false;
     {
         unique_lock<mutex> lock(mMutexReset);
@@ -1227,7 +1235,7 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     }
 
 
-    if(mpAtlas->KeyFramesInMap()<nMinKF)
+    if(mpAtlas->KeyFramesInMap(mnAgentId)<nMinKF)
         return;
 
     // Retrieve all keyframe in temporal order
@@ -1301,7 +1309,7 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     mInitTime = mpTracker->mLastFrame.mTimeStamp-vpKF.front()->mTimeStamp;
 
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
-    Optimizer::InertialOptimization(mpAtlas->GetCurrentMap(), mRwg, mScale, mbg, mba, mbMonocular, infoInertial, false, false, priorG, priorA);
+    Optimizer::InertialOptimization(mpAtlas->GetCurrentMap(mnAgentId), mRwg, mScale, mbg, mba, mbMonocular, infoInertial, false, false, priorG, priorA);
     std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 
     /*cout << "scale after inertial-only optimization: " << mScale << endl;
@@ -1319,18 +1327,19 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
 
 
     // Before this line we are not changing the map
-
-    unique_lock<mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
+    std::cout << "LocalMapping::initializeIMU | Trying to get CurrentMap->mMutexMapUpdate" << std::endl;
+    unique_lock<mutex> lock(mpAtlas->GetCurrentMap(mnAgentId)->mMutexMapUpdate);
+    std::cout << "LocalMapping::initializeIMU | Got the CurrentMap->mMutexMapUpdate" << std::endl;
     std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
     if ((fabs(mScale-1.f)>0.00001)||!mbMonocular)
     {
-        mpAtlas->GetCurrentMap()->ApplyScaledRotation(Converter::toCvMat(mRwg).t(),mScale,true);
+        mpAtlas->GetCurrentMap(mnAgentId)->ApplyScaledRotation(Converter::toCvMat(mRwg).t(),mScale,true);
         mpTracker->UpdateFrameIMU(mScale,vpKF[0]->GetImuBias(),mpCurrentKeyFrame);
     }
     std::chrono::steady_clock::time_point t3 = std::chrono::steady_clock::now();
 
     // Check if initialization OK
-    if (!mpAtlas->isImuInitialized())
+    if (!mpAtlas->isImuInitialized(mnAgentId))
         for(int i=0;i<N;i++)
         {
             KeyFrame* pKF2 = vpKF[i];
@@ -1345,19 +1354,19 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     if (bFIBA)
     {
         if (priorA!=0.f)
-            Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(), 100, false, 0, NULL, true, priorG, priorA);
+            Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(mnAgentId), 100, false, 0, NULL, true, priorG, priorA);
         else
-            Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(), 100, false, 0, NULL, false);
+            Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(mnAgentId), 100, false, 0, NULL, false);
     }
 
     std::chrono::steady_clock::time_point t5 = std::chrono::steady_clock::now();
 
     // If initialization is OK
     mpTracker->UpdateFrameIMU(1.0,vpKF[0]->GetImuBias(),mpCurrentKeyFrame);
-    if (!mpAtlas->isImuInitialized())
+    if (!mpAtlas->isImuInitialized(mnAgentId))
     {
-        cout << "IMU in Map " << mpAtlas->GetCurrentMap()->GetId() << " is initialized" << endl;
-        mpAtlas->SetImuInitialized();
+        cout << "IMU in Map " << mpAtlas->GetCurrentMap(mnAgentId)->GetId() << " is initialized" << endl;
+        mpAtlas->SetImuInitialized(mnAgentId);
         mpTracker->t0IMU = mpTracker->mCurrentFrame.mTimeStamp;
         mpCurrentKeyFrame->bImu = true;
     }
@@ -1423,7 +1432,7 @@ void LocalMapping::ScaleRefinement()
     mScale=1.0;
 
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
-    Optimizer::InertialOptimization(mpAtlas->GetCurrentMap(), mRwg, mScale);
+    Optimizer::InertialOptimization(mpAtlas->GetCurrentMap(mnAgentId), mRwg, mScale);
     std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 
     if (mScale<1e-1) // 1e-1
@@ -1434,11 +1443,13 @@ void LocalMapping::ScaleRefinement()
     }
 
     // Before this line we are not changing the map
-    unique_lock<mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
+    std::cout << "LocalMapping::ScaleRefinement | About to get the current map mutex" << std::endl;
+    unique_lock<mutex> lock(mpAtlas->GetCurrentMap(mnAgentId)->mMutexMapUpdate);
+    std::cout << "LocalMapping::ScaleRefinement | Got the current map mutex" << std::endl;
     std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
     if ((fabs(mScale-1.f)>0.00001)||!mbMonocular)
     {
-        mpAtlas->GetCurrentMap()->ApplyScaledRotation(Converter::toCvMat(mRwg).t(),mScale,true);
+        mpAtlas->GetCurrentMap(mnAgentId)->ApplyScaledRotation(Converter::toCvMat(mRwg).t(),mScale,true);
         mpTracker->UpdateFrameIMU(mScale,mpCurrentKeyFrame->GetImuBias(),mpCurrentKeyFrame);
     }
     std::chrono::steady_clock::time_point t3 = std::chrono::steady_clock::now();

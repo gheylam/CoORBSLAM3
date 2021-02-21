@@ -62,7 +62,7 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
     mbToBeErased(false), mbBad(false), mHalfBaseline(F.mb/2), mpMap(pMap), mbCurrentPlaceRecognition(false), mNameFile(F.mNameFile), mbHasHessian(false), mnMergeCorrectedForKF(0),
     mpCamera(F.mpCamera), mpCamera2(F.mpCamera2),
     mvLeftToRightMatch(F.mvLeftToRightMatch),mvRightToLeftMatch(F.mvRightToLeftMatch),mTlr(F.mTlr.clone()),
-    mvKeysRight(F.mvKeysRight), NLeft(F.Nleft), NRight(F.Nright), mTrl(F.mTrl), mnNumberOfOpt(0)
+    mvKeysRight(F.mvKeysRight), NLeft(F.Nleft), NRight(F.Nright), mTrl(F.mTrl), mnNumberOfOpt(0), mnAgentId(F.GetAgentId())
 {
 
     imgLeft = F.imgLeft.clone();
@@ -95,6 +95,8 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
     SetPose(F.mTcw);
 
     mnOriginMapId = pMap->GetId();
+
+
 }
 
 void KeyFrame::ComputeBoW()
@@ -1270,5 +1272,9 @@ void KeyFrame::SetKeyFrameDatabase(KeyFrameDatabase* pKFDB)
 {
     mpKeyFrameDB = pKFDB;
 }
+
+int KeyFrame::GetAgentId(){
+            return mnAgentId;
+        }
 
 } //namespace ORB_SLAM

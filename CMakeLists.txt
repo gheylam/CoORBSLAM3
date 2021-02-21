@@ -84,8 +84,8 @@ include_directories(
 ## Generate services in the 'srv' folder
 add_service_files(
    FILES
-   AddTwoInts.srv
    NewAgentFeed.srv
+   NewAgentRequest.srv
 )
 
 ## Generate actions in the 'action' folder
@@ -139,7 +139,6 @@ add_library(
         src/OptimizableTypes.cpp
         src/MLPnPsolver.cpp
         src/TwoViewReconstruction.cc
-        src/ClientPO.cpp
 
         ## Header files
         include/System.h
@@ -170,8 +169,7 @@ add_library(
         include/OptimizableTypes.h
         include/MLPnPsolver.h
         include/TwoViewReconstruction.h
-        include/ClientPO.h
-        src/ImgFrame.cpp include/ImgFrame.h)
+        src/ImgFrame.cpp include/ImgFrame.h src/Agent.cpp include/Agent.h)
 
 set(THIRDPARTY_LIBS
         ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
@@ -211,8 +209,8 @@ set(EXTERNAL_LIBRARIES
 ###########
 
 ## Setting build locations
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/debug)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/release)
+#set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/debug)
+#set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/release)
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
@@ -265,14 +263,6 @@ add_executable(CoORBSLAM3_mono src/corbslam3_mono.cpp)
 target_link_libraries(CoORBSLAM3_mono ${PROJECT_NAME})
 add_dependencies(CoORBSLAM3_mono CoORBSLAM3_generate_messages_cpp CoORBSLAM3_gencpp)
 
-add_executable(agent src/agent.cpp)
-target_link_libraries(agent ${catkin_LIBRARIES})
-add_dependencies(agent CoORBSLAM3_generate_messages_cpp)
-
-add_executable(server src/server.cpp)
-target_link_libraries(server ${catkin_LIBRARIES})
-add_dependencies(server CoORBSLAM3_generate_messages_cpp)
-
 add_executable(agent_image src/agent_image.cpp)
 target_link_libraries(agent_image ${catkin_LIBRARIES} ${OpenCV_LIBS})
 add_dependencies(agent_image CoORBSLAM3_generate_messages_cpp CoORBSLAM3_gencpp)
@@ -281,6 +271,3 @@ add_executable(agent_node src/AgentNode.cpp)
 target_link_libraries(agent_node ${catkin_LIBRARIES} ${OpenCV_LIBS})
 add_dependencies(agent_node CoORBSLAM3_generate_messages_cpp CoORBSLAM3_gencpp)
 
-add_executable(add_two_ints_client src/add_two_ints_client.cpp)
-target_link_libraries(add_two_ints_client ${catkin_LIBRARIES})
-add_dependencies(add_two_ints_client CoORBSLAM3_gencpp)
