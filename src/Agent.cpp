@@ -55,6 +55,82 @@ void Agent::SetViewerParams(double fKeyFrameSize, int nKeyFrameLineWidth, double
 
 }
 
+std::vector<float> Agent::GetCamCalib() {
+    std::vector<float> vCamCalib{(float)mfFx, (float)mfFy, (float)mfCx, (float)mfCy};
+    return vCamCalib;
+}
+
+cv::Mat Agent::GetDistCoef() {
+    cv::Mat matDistCoef = cv::Mat::zeros(4, 1, CV_32F);
+    matDistCoef.at<float>(0) = mfK1;
+    matDistCoef.at<float>(1) = mfK2;
+    matDistCoef.at<float>(2) = mfP1;
+    matDistCoef.at<float>(3) = mfP2;
+    if(mfK3 != 0){
+        matDistCoef.resize(5);
+        matDistCoef.at<float>(4) = mfK3;
+    }
+    return matDistCoef.clone();
+}
+
 int Agent::GetId() {
     return mnAgentId;
+}
+
+double Agent::GetFPS(){
+    return mfFPS;
+}
+
+bool Agent::GetRGB(){
+    return mbRGB;
+}
+
+cv::String Agent::GetCameraType(){
+    return msCameraType;
+}
+
+//ORB Extractor parameter getter methods
+int Agent::GetNumFeatures(){
+    return mnFeatures;
+}
+
+int Agent::GetNumLevels() {
+    return mnLevels;
+}
+
+int Agent::GetIniThFAST() {
+    return mnIniThFAST;
+}
+
+int Agent::GetMinThFAST() {
+    return mnIniThFAST;
+}
+
+double Agent::GetScaleFactor() {
+    return mfScaleFactor;
+}
+
+//Viewer parameter getter methods
+int Agent::GetCameraWidth() {
+    return mnCameraWidth;
+}
+
+int Agent::GetCameraHeight() {
+    return mnCameraHeight;
+}
+
+double Agent::GetViewpointX() {
+    return mfViewpointX;
+}
+
+double Agent::GetViewpointY() {
+    return mfViewpointY;
+}
+
+double Agent::GetViewpointZ() {
+    return mfViewpointZ;
+}
+
+double Agent::GetViewpointF() {
+    return mfViewpointF;
 }

@@ -123,7 +123,9 @@ bool MapDrawer::ParseViewerParamFile(cv::FileStorage &fSettings)
 void MapDrawer::DrawMapPoints()
 {
     const vector<MapPoint*> &vpMPs = mpAtlas->GetAllMapPoints();
+    //std::cout << "MapDrawer::DrawMapPoints() | Got all map points from atlas" << std::endl;
     const vector<MapPoint*> &vpRefMPs = mpAtlas->GetReferenceMapPoints();
+    //std::cout << "MapDrawer::DrawMapPoints() | Got all reference map points from atlas" << std::endl;
 
     set<MapPoint*> spRefMPs(vpRefMPs.begin(), vpRefMPs.end());
 
@@ -166,6 +168,7 @@ void MapDrawer::DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph, const b
     const float z = w*0.6;
 
     const vector<KeyFrame*> vpKFs = mpAtlas->GetAllKeyFrames();
+    //std::cout << "MapDrawer::DrawKeyFrames() | Got all the KeyFrames from Atlas" << std::endl;
 
     if(bDrawKF)
     {
@@ -425,7 +428,6 @@ void MapDrawer::DrawCurrentCamera(pangolin::OpenGlMatrix &Twc)
 
     glPopMatrix();
 }
-
 
 void MapDrawer::SetCurrentCameraPose(const cv::Mat &Tcw)
 {

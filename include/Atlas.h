@@ -25,9 +25,11 @@
 #include "GeometricCamera.h"
 #include "Pinhole.h"
 #include "KannalaBrandt8.h"
+#include "Agent.h"
 
 #include <set>
 #include <mutex>
+#include <map>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/export.hpp>
 
@@ -76,7 +78,8 @@ public:
     Atlas(int initKFid); // When its initialization the first map is created
     ~Atlas();
     void CreateNewMap();
-    void CreateNewMap(int AgentID);
+    void CreateNewMap(int nAgentId);
+
     void ChangeMap(Map* pMap);
 
     unsigned long int GetLastInitKFid();
@@ -93,34 +96,51 @@ public:
 
     /* All methods without Map pointer work on current map */
     void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);
+    void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs, int nAgentId);
     void InformNewBigChange();
+    void InformNewBigChange(int nAgentId);
     int GetLastBigChangeIdx();
+    int GetLastBigChangeIdx(int nAgentId);
 
     long unsigned int MapPointsInMap();
+    long unsigned int MapPointsInMap(int nAgentId);
     long unsigned KeyFramesInMap();
+    long unsigned KeyFramesInMap(int nAgentId);
 
     // Method for get data in current map
     std::vector<KeyFrame*> GetAllKeyFrames();
+    std::vector<KeyFrame*> GetAllKeyFrames(int nAgentId);
+
     std::vector<MapPoint*> GetAllMapPoints();
+    std::vector<MapPoint*> GetAllMapPoints(int nAgentId);
+
     std::vector<MapPoint*> GetReferenceMapPoints();
+    std::vector<MapPoint*> GetReferenceMapPoints(int nAgentId);
 
     vector<Map*> GetAllMaps();
+    long unsigned GetAgentMapCount(int nAgentId);
 
     int CountMaps();
 
     void clearMap();
+    void clearMap(int nAgentId);
 
     void clearAtlas();
 
     Map* GetCurrentMap();
+    Map* GetCurrentMap(int nAgentId);
 
     void SetMapBad(Map* pMap);
     void RemoveBadMaps();
 
     bool isInertial();
+    bool isInertial(int nAgentId);
     void SetInertialSensor();
+    void SetInertialSensor(int nAgentId);
     void SetImuInitialized();
+    void SetImuInitialized(int nAgentId);
     bool isImuInitialized();
+    bool isImuInitialized(int nAgentId);
 
     // Function for garantee the correction of serialization of this object
     void PreSave();
@@ -136,15 +156,17 @@ public:
 
     long unsigned int GetNumLivedMP();
 
-    //Agent related methods
-    void SetAgent(int nAgentID);
-    int GetCurrentAgent();
+    int GetNumAgentContext();
+
+
+
 
 protected:
     //Agent related context members
-    int mnCurrentAgent;
-    std::map<int, Map*> mmAgentMaps;
-    std::map<int, unsigned long int> mmnAgentLastInitFKidMap;
+    Agent* mpCurrentAgent;
+    std::map<int, Map*> mMapAgentMap;
+    std::map<int, unsigned long int> mMapAgentLastInitFKidMap;
+    std::map<int, int> mMapNumAgentMaps; //This member is created solely for aiding tracking initialization
     //Member variables that need to correspond to a unique agent
     Map* mpCurrentMap;
     unsigned long int mnLastInitKFidMap;
@@ -161,13 +183,13 @@ protected:
 
     //Pinhole testCam;
     std::mutex mMutexAtlas;
+    std::recursive_mutex mRMutexAtlas;
     Viewer* mpViewer;
     bool mHasViewer;
 
     // Class references for the map reconstruction from the save file
     KeyFrameDatabase* mpKeyFrameDB;
     ORBVocabulary* mpORBVocabulary;
-
 
 }; // class Atlas
 

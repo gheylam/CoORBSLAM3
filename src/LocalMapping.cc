@@ -295,6 +295,7 @@ void LocalMapping::ProcessNewKeyFrame()
         unique_lock<mutex> lock(mMutexNewKFs);
         mpCurrentKeyFrame = mlNewKeyFrames.front();
         mlNewKeyFrames.pop_front();
+        mnAgentId = mpCurrentKeyFrame->GetAgentId();
     }
 
     // Compute Bags of Words structures
@@ -706,6 +707,7 @@ void LocalMapping::CreateNewMapPoints()
                 continue;
 
             // Triangulation is succesfull
+            //MapPoint* pMP = new MapPoint(x3D,mpCurrentKeyFrame,mpAtlas->GetCurrentMap(mnAgentId));
             MapPoint* pMP = new MapPoint(x3D,mpCurrentKeyFrame,mpAtlas->GetCurrentMap());
 
             pMP->AddObservation(mpCurrentKeyFrame,idx1);            
@@ -948,6 +950,7 @@ void LocalMapping::KeyFrameCulling()
     else
         redundant_th = 0.5;
 
+    //const bool bInitImu = mpAtlas->isImuInitialized(mnAgentId);
     const bool bInitImu = mpAtlas->isImuInitialized();
     int count=0;
 
@@ -1108,6 +1111,7 @@ void LocalMapping::RequestReset()
             if(!mbResetRequested)
                 break;
         }
+
         usleep(3000);
     }
     cout << "LM: Map reset, Done!!!" << endl;
@@ -1130,6 +1134,9 @@ void LocalMapping::RequestResetActiveMap(Map* pMap)
             if(!mbResetRequestedActiveMap)
                 break;
         }
+        std::cout << "LocalMapping::RequestReset() | in while loop" << std::endl;
+        //Added this in to reset the map
+        //ResetIfRequested(); //I shouldn't need this
         usleep(3000);
     }
     cout << "LM: Active map reset, Done!!!" << endl;
@@ -1137,6 +1144,7 @@ void LocalMapping::RequestResetActiveMap(Map* pMap)
 
 void LocalMapping::ResetIfRequested()
 {
+    //std::cout << "LocalMapping::ResetIfRequested() | Resetting LocalMapping Active Map" << endl;
     bool executed_reset = false;
     {
         unique_lock<mutex> lock(mMutexReset);

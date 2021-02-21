@@ -24,6 +24,27 @@ public:
                          double fViewpointF);
 
     int GetId();
+    double GetFPS();
+    bool GetRGB();
+    cv::String GetCameraType();
+    std::vector<float> GetCamCalib();
+    cv::Mat GetDistCoef();
+
+    //ORB Extractor parameter getter methods
+    int GetNumFeatures();
+    int GetNumLevels();
+    int GetIniThFAST();
+    int GetMinThFAST();
+    double GetScaleFactor();
+
+    //Viewer parameter getter methods
+    int GetCameraWidth();
+    int GetCameraHeight();
+
+    double GetViewpointX();
+    double GetViewpointY();
+    double GetViewpointZ();
+    double GetViewpointF();
 
 private:
     double mfLastJoined;

@@ -40,8 +40,8 @@ Verbose::eLevel Verbose::th = Verbose::VERBOSITY_NORMAL;
 
 System::System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor,
                const bool bUseViewer, const int initFr, const string &strSequence, const string &strLoadingFile):
-    mNextAgentId(0), mSensor(sensor), mpViewer(static_cast<Viewer*>(NULL)), mbReset(false), mbResetActiveMap(false),
-    mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false)
+    mNextAgentId(0), mSensor(sensor), mbUseViewer(bUseViewer), mpViewer(static_cast<Viewer*>(NULL)), mbReset(false), mbResetActiveMap(false),
+    mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false), mbFirstTracker(true)
 {
     // Output welcome message
     cout << endl <<
@@ -95,8 +95,9 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     //mpMap = new Map();
     mpAtlas = new Atlas(0);
 
-    if (mSensor==IMU_STEREO || mSensor==IMU_MONOCULAR)
-        mpAtlas->SetInertialSensor();
+    //Commented out for the purposes of CoORBSLAM3 running only on monocular
+    //if (mSensor==IMU_STEREO || mSensor==IMU_MONOCULAR)
+        //mpAtlas->SetInertialSensor();
 
     //Create Drawers. These are used by the Viewer
     mpFrameDrawer = new FrameDrawer(mpAtlas);
@@ -106,8 +107,9 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     //(it will live in the main thread of execution, the one that called this constructor)
     cout << "Seq. Name: " << strSequence << endl;
 
-    mpTracker = new Tracking(this, 1997,mpVocabulary, mpFrameDrawer, mpMapDrawer,
-                             mpAtlas, mpKeyFrameDatabase, strSettingsFile, mSensor, strSequence);
+    //Making a new tracker is now moved to System::AddNewAgent()
+    //mpTracker = new Tracking(this, 1997,mpVocabulary, mpFrameDrawer, mpMapDrawer,
+    //                         mpAtlas, mpKeyFrameDatabase, strSettingsFile, mSensor, strSequence);
 
     //Initialize the Local Mapping thread and launch
     mpLocalMapper = new LocalMapping(this, mpAtlas, mSensor==MONOCULAR || mSensor==IMU_MONOCULAR, mSensor==IMU_MONOCULAR || mSensor==IMU_STEREO, strSequence);
@@ -127,8 +129,12 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR); // mSensor!=MONOCULAR);
     mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
+
+    /*
+     * The viewer thread will only be started when the first tracker is created in
+     * the new System::AddNewAgent() method
     //Initialize the Viewer thread and launch
-    if(bUseViewer)
+    if(mbUseViewer)
     {
         mpViewer = new Viewer(this, mpFrameDrawer,mpMapDrawer,mpTracker,strSettingsFile);
         mptViewer = new thread(&Viewer::Run, mpViewer);
@@ -136,15 +142,17 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
         mpLoopCloser->mpViewer = mpViewer;
         mpViewer->both = mpFrameDrawer->both;
     }
+    */
 
+    //Making a new tracker is now moved to System::AddNewAgent()
     //Set pointers between threads
-    mpTracker->SetLocalMapper(mpLocalMapper);
-    mpTracker->SetLoopClosing(mpLoopCloser);
+    //mpTracker->SetLocalMapper(mpLocalMapper);
+    //mpTracker->SetLoopClosing(mpLoopCloser);
 
-    mpLocalMapper->SetTracker(mpTracker);
+    //mpLocalMapper->SetTracker(mpTracker);
     mpLocalMapper->SetLoopCloser(mpLoopCloser);
 
-    mpLoopCloser->SetTracker(mpTracker);
+    //mpLoopCloser->SetTracker(mpTracker);
     mpLoopCloser->SetLocalMapper(mpLocalMapper);
 
     // Fix verbosity
@@ -158,10 +166,9 @@ void System::Run(){
         //ROS component will see that System is busy
         SetAcceptNewAgent(false);
         SetAcceptImgFrames(false);
-
         //Check if there are new Image Frames in the queue
         if(CheckNewImgFrames()){
-            //std::cout << "New Image Frames found" << std::endl;
+            std::cout << "New Image Frames found" << std::endl;
             //If there is a new KeyFrame then we process it
             ProcessNewImgFrame();
         }else{
@@ -187,13 +194,15 @@ void System::ProcessNewImgFrame(){
     unique_lock<mutex> lock(mMutexNewImgFrames);
     ImgFrame *pCurrentImgFrame = mlNewImgFrames.front();
     mlNewImgFrames.pop_front();
-    std::cout << "Tracking new Img frame" << std::endl;
+    //Track with respect to the image frame's Agent
+    mpTracker = mMapAgentToTracker.find(pCurrentImgFrame->GetAgentId())->second;
+    std::cout << "SYSTEM | Tracking new Img Frame" << std::endl;
     TrackMonocular(pCurrentImgFrame->GetImage(), pCurrentImgFrame->GetTimestamp(), pCurrentImgFrame->GetAgentId());
+    std::cout << "SYSTEM | Finished tracking new Img Frame" << std::endl;
 }
 
 void System::InsertImgFrame(ImgFrame *pImgFrame){
     unique_lock<mutex> lock(mMutexNewImgFrames);
-    std::cout << "New KeyFrame added" << std::endl;
     mlNewImgFrames.push_back(pImgFrame);
 }
 
@@ -221,9 +230,32 @@ void System::AddNewAgent(Agent *pNewAgent){
         std::cout << "SYSTEM | Agent rejoining SLAM operation" << std::endl;
         //TODO Wake up the dormant Agent back into the round robin
     }else{
-        std::cout << "SYSTEM | New Agent: " << nAgentId
-        << " joining the SLAM operation" << std::endl;
+        std::cout << "SYSTEM | New Agent: " << nAgentId << std::endl;
+        std::cout << " joining the SLAM operation" << std::endl;
         mvAgentIds.push_back(nAgentId);
+        //Create a new Tracker for this agent
+        Tracking* pNewTracker = new Tracking(this, pNewAgent, mpVocabulary, mpFrameDrawer,
+                                            mpMapDrawer, mpAtlas, mpKeyFrameDatabase,
+                                            mSensor, "CoORBSLAM");
+
+        pNewTracker->SetLocalMapper(mpLocalMapper);
+        pNewTracker->SetLoopClosing(mpLoopCloser);
+
+        //TODO These need to be "AddNewTracker in the future"
+        mpLocalMapper->SetTracker(pNewTracker);
+        mpLoopCloser->SetTracker(pNewTracker);
+        //Add the new tracker into System
+        mMapAgentToTracker.insert(std::pair<int, Tracking*>(nAgentId, pNewTracker));
+        if(mbUseViewer && mbFirstTracker)
+        {
+            mbFirstTracker = false;
+            mpViewer = new Viewer(this, mpFrameDrawer,mpMapDrawer, pNewTracker, pNewAgent);
+            mptViewer = new thread(&Viewer::Run, mpViewer);
+            pNewTracker->SetViewer(mpViewer);
+            mpLoopCloser->mpViewer = mpViewer;
+            mpViewer->both = mpFrameDrawer->both;
+            std::cout << "Created First Tracker" << std::endl;
+        }
     }
 }
 
@@ -367,7 +399,6 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
         if(mbActivateLocalizationMode)
         {
             mpLocalMapper->RequestStop();
-
             // Wait until Local Mapping has effectively stopped
             while(!mpLocalMapper->isStopped())
             {
@@ -406,8 +437,9 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
         for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
             mpTracker->GrabImuData(vImuMeas[i_imu]);
 
+    std::cout << "SYSTEM | Calling mpTracker->GrabImageMonocular()" << std::endl;
     cv::Mat Tcw = mpTracker->GrabImageMonocular(im,timestamp,filename);
-
+    std::cout << "SYSTEM | mpTracker->GrabImageMonocular() has returned" << std::endl;
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;
     mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
@@ -469,13 +501,17 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
         for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
             mpTracker->GrabImuData(vImuMeas[i_imu]);
 
+
     cv::Mat Tcw = mpTracker->GrabImageMonocular(im,timestamp,filename);
 
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;
     mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
     mTrackedKeyPointsUn = mpTracker->mCurrentFrame.mvKeysUn;
-
+    std::cout << mTrackingState << std::endl;
+    std::cout << mTrackedMapPoints.size() << std::endl;
+    std::cout << mTrackedKeyPointsUn.size() << std::endl;
+    std::cout << Tcw << std::endl;
     return Tcw;
 }
 

@@ -46,12 +46,12 @@ namespace ORB_SLAM3
 {
 
 
-Tracking::Tracking(System *pSys, int nAgentID, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Atlas *pAtlas, KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor, const string &_nameSeq):
+Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Atlas *pAtlas, KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor, const string &_nameSeq):
     mState(NO_IMAGES_YET), mSensor(sensor), mTrackedFr(0), mbStep(false),
     mbOnlyTracking(false), mbMapUpdated(false), mbVO(false), mpORBVocabulary(pVoc), mpKeyFrameDB(pKFDB),
     mpInitializer(static_cast<Initializer*>(NULL)), mpSystem(pSys), mpViewer(NULL),
     mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpAtlas(pAtlas), mnLastRelocFrameId(0), time_recently_lost(5.0),
-    mnInitialFrameId(0), mbCreatedMap(false), mnFirstFrameId(0), mpCamera2(nullptr), mnAgentID(nAgentID)
+    mnInitialFrameId(0), mbCreatedMap(false), mnFirstFrameId(0), mpCamera2(nullptr)
 {
     // Load camera parameters from settings file
     cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
@@ -135,6 +135,110 @@ Tracking::Tracking(System *pSys, int nAgentID, ORBVocabulary* pVoc, FrameDrawer 
     mnNumDataset = 0;
 
     if(!b_parse_cam || !b_parse_orb || !b_parse_imu)
+    {
+        std::cerr << "**ERROR in the config file, the format is not correct**" << std::endl;
+        try
+        {
+            throw -1;
+        }
+        catch(exception &e)
+        {
+
+        }
+    }
+
+    //f_track_stats.open("tracking_stats"+ _nameSeq + ".txt");
+    /*f_track_stats.open("tracking_stats.txt");
+    f_track_stats << "# timestamp, Num KF local, Num MP local, time" << endl;
+    f_track_stats << fixed ;*/
+
+#ifdef SAVE_TIMES
+    f_track_times.open("tracking_times.txt");
+    f_track_times << "# ORB_Ext(ms), Stereo matching(ms), Preintegrate_IMU(ms), Pose pred(ms), LocalMap_track(ms), NewKF_dec(ms)" << endl;
+    f_track_times << fixed ;
+#endif
+}
+
+
+Tracking::Tracking(System *pSys, Agent* pAgent, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Atlas *pAtlas, KeyFrameDatabase* pKFDB, const int sensor, const string &_nameSeq):
+        mpAgent(pAgent), mState(NO_IMAGES_YET), mSensor(sensor), mTrackedFr(0), mbStep(false),
+        mbOnlyTracking(false), mbMapUpdated(false), mbVO(false), mpORBVocabulary(pVoc), mpKeyFrameDB(pKFDB),
+        mpInitializer(static_cast<Initializer*>(NULL)), mpSystem(pSys), mpViewer(NULL),
+        mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpAtlas(pAtlas), mnLastRelocFrameId(0), time_recently_lost(5.0),
+        mnInitialFrameId(0), mbCreatedMap(false), mnFirstFrameId(0), mpCamera2(nullptr), mbAgentFirstFrame(true)
+{
+    std::cout << "Loading parameters from agent" << std::endl;
+    // Load camera parameters from Agent
+    bool b_get_agent_cam = GetAgentCamParam();
+    if(!b_get_agent_cam){
+        std::cout << "TRACKING | Error with getting camera parameters from Agent" << std::endl;
+    }
+
+    // Load ORB parameters from Agent
+    bool b_get_agent_orb = GetAgentORBParam();
+    if(!b_get_agent_orb){
+        std::cout << "TRACKING | Error with getting ORB parameters from Agent" << std::endl;
+    }
+
+    initID = 0; lastID = 0;
+
+    // Load IMU parameters
+    bool b_parse_imu = true;
+    if(sensor==System::IMU_MONOCULAR || sensor==System::IMU_STEREO)
+    {
+        //TODO currently CoORBSLAM only supports a monocular SLAM system
+    }
+
+    mbInitWith3KFs = false;
+
+    //Rectification parameters
+    /*mbNeedRectify = false;
+    if((mSensor == System::STEREO || mSensor == System::IMU_STEREO) && sCameraName == "PinHole")
+    {
+        cv::Mat K_l, K_r, P_l, P_r, R_l, R_r, D_l, D_r;
+        fSettings["LEFT.K"] >> K_l;
+        fSettings["RIGHT.K"] >> K_r;
+
+        fSettings["LEFT.P"] >> P_l;
+        fSettings["RIGHT.P"] >> P_r;
+
+        fSettings["LEFT.R"] >> R_l;
+        fSettings["RIGHT.R"] >> R_r;
+
+        fSettings["LEFT.D"] >> D_l;
+        fSettings["RIGHT.D"] >> D_r;
+
+        int rows_l = fSettings["LEFT.height"];
+        int cols_l = fSettings["LEFT.width"];
+        int rows_r = fSettings["RIGHT.height"];
+        int cols_r = fSettings["RIGHT.width"];
+
+        if(K_l.empty() || K_r.empty() || P_l.empty() || P_r.empty() || R_l.empty() || R_r.empty() || D_l.empty() || D_r.empty()
+                || rows_l==0 || cols_l==0 || rows_r==0 || cols_r==0)
+        {
+            mbNeedRectify = false;
+        }
+        else
+        {
+            mbNeedRectify = true;
+            // M1r y M2r son los outputs (igual para l)
+            // M1r y M2r son las matrices relativas al mapeo correspondiente a la rectificación de mapa en el eje X e Y respectivamente
+            //cv::initUndistortRectifyMap(K_l,D_l,R_l,P_l.rowRange(0,3).colRange(0,3),cv::Size(cols_l,rows_l),CV_32F,M1l,M2l);
+            //cv::initUndistortRectifyMap(K_r,D_r,R_r,P_r.rowRange(0,3).colRange(0,3),cv::Size(cols_r,rows_r),CV_32F,M1r,M2r);
+        }
+
+
+    }
+    else
+    {
+        int cols = 752;
+        int rows = 480;
+        cv::Mat R_l = cv::Mat::eye(3, 3, CV_32F);
+    }*/
+
+    mnNumDataset = 0;
+
+    if(!b_get_agent_cam || !b_get_agent_orb || !b_parse_imu)
     {
         std::cerr << "**ERROR in the config file, the format is not correct**" << std::endl;
         try
@@ -887,6 +991,119 @@ bool Tracking::ParseIMUParamFile(cv::FileStorage &fSettings)
     return true;
 }
 
+bool Tracking::GetAgentCamParam(){
+    mDistCoef = mpAgent->GetDistCoef();
+    cout << endl << "Camera Parameters: " << endl;
+
+    string sCameraName = mpAgent->GetCameraType().c_str();
+    if(sCameraName == "PinHole")
+    {
+        std::vector<float> vCamCalibParams = mpAgent->GetCamCalib();
+        float fx = vCamCalibParams[0];
+        float fy = vCamCalibParams[1];
+        float cx = vCamCalibParams[2];
+        float cy = vCamCalibParams[3];
+
+        mpCamera = new Pinhole(vCamCalibParams);
+
+        mpAtlas->AddCamera(mpCamera);
+
+        std::cout << "- Camera: Pinhole" << std::endl;
+        std::cout << "- fx: " << fx << std::endl;
+        std::cout << "- fy: " << fy << std::endl;
+        std::cout << "- cx: " << cx << std::endl;
+        std::cout << "- cy: " << cy << std::endl;
+        std::cout << "- k1: " << mDistCoef.at<float>(0) << std::endl;
+        std::cout << "- k2: " << mDistCoef.at<float>(1) << std::endl;
+
+
+        std::cout << "- p1: " << mDistCoef.at<float>(2) << std::endl;
+        std::cout << "- p2: " << mDistCoef.at<float>(3) << std::endl;
+
+        if(mDistCoef.rows==5)
+            std::cout << "- k3: " << mDistCoef.at<float>(4) << std::endl;
+
+        mK = cv::Mat::eye(3,3,CV_32F);
+        mK.at<float>(0,0) = fx;
+        mK.at<float>(1,1) = fy;
+        mK.at<float>(0,2) = cx;
+        mK.at<float>(1,2) = cy;
+
+    }
+    else if(sCameraName == "KannalaBrandt8")
+    {
+        //This camera is not implmented in CoORBSLAM3
+        std::cout << "TRACKING | KannalaBrandt8 camera is not implemented in CoORBSLAM3" << std::endl;
+        return false;
+    }
+    else
+    {
+        std::cerr << "*Not Supported Camera Sensor*" << std::endl;
+        std::cerr << "Check an example configuration file with the desired sensor" << std::endl;
+        return false;
+    }
+
+    if(mSensor==System::STEREO || mSensor==System::IMU_STEREO)
+    {
+        std::cout << "TRACKING | Stero system is not implemented in CoORBSLAM3" << std::endl;
+    }
+
+    float fps = mpAgent->GetFPS();
+    if(fps==0)
+        fps=30;
+
+    // Max/Min Frames to insert keyframes and to check relocalisation
+    mMinFrames = 0;
+    mMaxFrames = fps;
+
+    cout << "- fps: " << fps << endl;
+
+    int nRGB = mpAgent->GetRGB();
+    mbRGB = nRGB;
+
+    if(mbRGB)
+        cout << "- color order: RGB (ignored if grayscale)" << endl;
+    else
+        cout << "- color order: BGR (ignored if grayscale)" << endl;
+
+    if(mSensor==System::STEREO || mSensor==System::RGBD || mSensor==System::IMU_STEREO)
+    {
+        std::cout << "TRACKING | Stereo is not implemented in CoORBSLAM" << std::endl;
+    }
+
+    if(mSensor==System::RGBD)
+    {
+        std::cout << "TRACKING | RGBD is not implemented in CoORBSLAM" << std::endl;
+    }
+
+    return true;
+}
+
+bool Tracking::GetAgentORBParam(){
+    int nFeatures = mpAgent->GetNumFeatures();
+    int nLevels = mpAgent->GetNumLevels();
+    int fIniThFAST = mpAgent->GetIniThFAST();
+    int fMinThFAST = mpAgent->GetMinThFAST();
+    float fScaleFactor = mpAgent->GetScaleFactor();
+
+    mpORBextractorLeft = new ORBextractor(nFeatures,fScaleFactor,nLevels,fIniThFAST,fMinThFAST);
+
+    if(mSensor==System::STEREO || mSensor==System::IMU_STEREO)
+        mpORBextractorRight = new ORBextractor(nFeatures,fScaleFactor,nLevels,fIniThFAST,fMinThFAST);
+
+    if(mSensor==System::MONOCULAR || mSensor==System::IMU_MONOCULAR)
+        mpIniORBextractor = new ORBextractor(5*nFeatures,fScaleFactor,nLevels,fIniThFAST,fMinThFAST);
+
+    cout << endl << "ORB Extractor Parameters: " << endl;
+    cout << "- Number of Features: " << nFeatures << endl;
+    cout << "- Scale Levels: " << nLevels << endl;
+    cout << "- Scale Factor: " << fScaleFactor << endl;
+    cout << "- Initial Fast Threshold: " << fIniThFAST << endl;
+    cout << "- Minimum Fast Threshold: " << fMinThFAST << endl;
+
+    return true;
+}
+
 void Tracking::SetLocalMapper(LocalMapping *pLocalMapper)
 {
     mpLocalMapper=pLocalMapper;
@@ -1034,12 +1251,8 @@ cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const d
 
 cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename)
 {
-    /*
-        cout << "I'VE GRABBED SOMETHING" << endl;
-        OrbSlamClient newClient(17);
-        newClient.publish();
-    */
-
+    std::cout << "TRACKING | Inside GrabImageMonocular" << std::endl;
+    std::cout << "AgentId: " << mpAgent->GetId() << std::endl;
     mImGray = im;
 
     if(mImGray.channels()==3)
@@ -1057,12 +1270,13 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
             cvtColor(mImGray,mImGray,CV_BGRA2GRAY);
     }
 
+
     if (mSensor == System::MONOCULAR)
     {
         if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET ||(lastID - initID) < mMaxFrames)
-            mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth);
+            mCurrentFrame = Frame(mpAgent->GetId(), mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth);
         else
-            mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth);
+            mCurrentFrame = Frame(mpAgent->GetId(), mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth);
     }
     else if(mSensor == System::IMU_MONOCULAR)
     {
@@ -1074,6 +1288,8 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
             mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth,&mLastFrame,*mpImuCalib);
     }
 
+
+
     if (mState==NO_IMAGES_YET)
         t0=timestamp;
 
@@ -1083,8 +1299,10 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
     mCurrentFrame.mnDataset = mnNumDataset;
 
     lastID = mCurrentFrame.mnId;
-    Track();
 
+    std::cout << "TRACKING | Entering Track()" << std::endl;
+    Track();
+    std::cout << "TRACKING | Exitted Track()" << std::endl;
     std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 
     double t_track = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(t1 - t0).count();
@@ -1391,13 +1609,25 @@ void Tracking::Track()
     mTime_LocalMapTrack = 0;
     mTime_NewKF_Dec = 0;
 #endif
-
     if (bStepByStep)
     {
         while(!mbStep)
             usleep(500);
         mbStep = false;
     }
+
+
+    if (mbAgentFirstFrame)
+    {
+        //This intialization is to replace the CreateNewMap in the Atlas Constructor
+        cout << "TRACKING | First Frame for Tracker, creating a new map in Atlas" << endl;
+        mpAtlas->CreateNewMap(mpAgent->GetId());
+        //mpAtlas->CreateNewMap();
+        mbAgentFirstFrame = false;
+        std::cout << "Tracking State after creating map: " << mState << std::endl;
+    }
+
+
 
     if(mpLocalMapper->mbBadImu)
     {
@@ -1406,7 +1636,9 @@ void Tracking::Track()
         return;
     }
 
+    std::cout << "TRACKING | In Method Track() calling mpAtlas->GetCurrentMap(agentId)" << std::endl;
     Map* pCurrentMap = mpAtlas->GetCurrentMap();
+    std::cout << "TRACKING | In Method Track() exit mpAtlas->GetCurrentMap(agentId)" << std::endl;
 
     if(mState!=NO_IMAGES_YET)
     {
@@ -1420,6 +1652,7 @@ void Tracking::Track()
         }
         else if(mCurrentFrame.mTimeStamp>mLastFrame.mTimeStamp+1.0)
         {
+            cout << "TRACKING::Track() found that currentTimeStamp > lastTimeStamp+1.0" << endl;
             cout << "id last: " << mLastFrame.mnId << "    id curr: " << mCurrentFrame.mnId << endl;
             if(mpAtlas->isInertial())
             {
@@ -1472,6 +1705,7 @@ void Tracking::Track()
 
 
     }
+
     mbCreatedMap = false;
 
     // Get Map Mutex -> Map cannot be changed
@@ -1491,10 +1725,13 @@ void Tracking::Track()
 
     if(mState==NOT_INITIALIZED)
     {
+        std::cout << "TRACKING | Monocular Map is not initialized" << std::endl;
+        std::cout << "mSensor value: " << mSensor << std::endl;
         if(mSensor==System::STEREO || mSensor==System::RGBD || mSensor==System::IMU_STEREO)
             StereoInitialization();
         else
         {
+            std::cout << "TRACKING| Running MonocularInitialization()" << std::endl;
             MonocularInitialization();
         }
 
@@ -1505,11 +1742,16 @@ void Tracking::Track()
             mLastFrame = Frame(mCurrentFrame);
             return;
         }
-
+        // This has been replaced by Atlas::GetAgentMapCount in CoORBSLAM3
         if(mpAtlas->GetAllMaps().size() == 1)
         {
             mnFirstFrameId = mCurrentFrame.mnId;
         }
+
+        //if(mpAtlas->GetAgentMapCount(mpAgent->GetId()) == 1)
+        //{
+        //    mnFirstFrameId = mCurrentFrame.mnId;
+        //}
     }
     else
     {
@@ -1747,9 +1989,10 @@ void Tracking::Track()
                 }
 
                 mState=RECENTLY_LOST;
+            }else{
+                std::cout << "Tracking::Track() | Setting mState to Lost" << std::endl;
+                mState = LOST; // visual to lost
             }
-            else
-                mState=LOST; // visual to lost
 
             if(mCurrentFrame.mnId>mnLastRelocFrameId+mMaxFrames)
             {
@@ -1995,10 +2238,12 @@ void Tracking::StereoInitialization()
         mnLastRelocFrameId = mCurrentFrame.mnId;
 
         mvpLocalKeyFrames.push_back(pKFini);
+        //mvpLocalMapPoints=mpAtlas->GetAllMapPoints(mpAgent->GetId());
         mvpLocalMapPoints=mpAtlas->GetAllMapPoints();
         mpReferenceKF = pKFini;
         mCurrentFrame.mpReferenceKF = pKFini;
 
+        //mpAtlas->SetReferenceMapPoints(mvpLocalMapPoints, mpAgent->GetId());
         mpAtlas->SetReferenceMapPoints(mvpLocalMapPoints);
 
         mpAtlas->GetCurrentMap()->mvpKeyFrameOrigins.push_back(pKFini);
@@ -2011,9 +2256,10 @@ void Tracking::StereoInitialization()
 
 void Tracking::MonocularInitialization()
 {
-
+    cout << "Tracking::MonocularInitialization() | !mpInitializer=" << !mpInitializer << endl;
     if(!mpInitializer)
     {
+        std::cout << "Tracking::MonocularInitialization | mpInitializer is false" << std::endl;
         // Set Reference Frame
         if(mCurrentFrame.mvKeys.size()>100)
         {
@@ -2028,6 +2274,7 @@ void Tracking::MonocularInitialization()
                 delete mpInitializer;
 
             mpInitializer =  new Initializer(mCurrentFrame,1.0,200);
+            std::cout << "Tracking::MonocularInitialization | new mpInitializer is created " << std::endl;
 
             fill(mvIniMatches.begin(),mvIniMatches.end(),-1);
 
@@ -2046,6 +2293,8 @@ void Tracking::MonocularInitialization()
     }
     else
     {
+        std::cout << "Tracking::MonocularInitialization | mpInitializer is True" << std::endl;
+        std::cout << "mCurrentFrame.mvKeys.size()=" << (int)mCurrentFrame.mvKeys.size() << std::endl;
         if (((int)mCurrentFrame.mvKeys.size()<=100)||((mSensor == System::IMU_MONOCULAR)&&(mLastFrame.mTimeStamp-mInitialFrame.mTimeStamp>1.0)))
         {
             delete mpInitializer;
@@ -2089,6 +2338,8 @@ void Tracking::MonocularInitialization()
             Rcw.copyTo(Tcw.rowRange(0,3).colRange(0,3));
             tcw.copyTo(Tcw.rowRange(0,3).col(3));
             mCurrentFrame.SetPose(Tcw);
+            std::cout << "Tracking::MonocularInitialization | mCurrentFrame Pose set" << std::endl;
+            std::cout << Tcw << std::endl;
 
             CreateInitialMapMonocular();
 
@@ -2206,11 +2457,13 @@ void Tracking::CreateInitialMapMonocular()
 
     mvpLocalKeyFrames.push_back(pKFcur);
     mvpLocalKeyFrames.push_back(pKFini);
+    //mvpLocalMapPoints=mpAtlas->GetAllMapPoints(mpAgent->GetId());
     mvpLocalMapPoints=mpAtlas->GetAllMapPoints();
     mpReferenceKF = pKFcur;
     mCurrentFrame.mpReferenceKF = pKFcur;
 
     // Compute here initial velocity
+    //vector<KeyFrame*> vKFs = mpAtlas->GetAllKeyFrames(mpAgent->GetId());
     vector<KeyFrame*> vKFs = mpAtlas->GetAllKeyFrames();
 
     cv::Mat deltaT = vKFs.back()->GetPose()*vKFs.front()->GetPoseInverse();
@@ -2223,6 +2476,7 @@ void Tracking::CreateInitialMapMonocular()
 
     mLastFrame = Frame(mCurrentFrame);
 
+    //mpAtlas->SetReferenceMapPoints(mvpLocalMapPoints, mpAgent->GetId());
     mpAtlas->SetReferenceMapPoints(mvpLocalMapPoints);
 
     mpMapDrawer->SetCurrentCameraPose(pKFcur->GetPose());
@@ -2239,7 +2493,10 @@ void Tracking::CreateInitialMapMonocular()
 void Tracking::CreateMapInAtlas()
 {
     mnLastInitFrameId = mCurrentFrame.mnId;
+    //std::cout << "TRACKING | In method Tracking::CreateMapInAtlas() calling mpAtlas->CreateNewMap(mpAgent)" << std::endl;
+    //mpAtlas->CreateNewMap(mpAgent->GetId());
     mpAtlas->CreateNewMap();
+    //std::cout << "TRACKING | In method Tracking::CreateMapInAtlas() left mpAtlas->CreateNewMap(mpAgent)" << std::endl;
     if (mSensor==System::IMU_STEREO || mSensor == System::IMU_MONOCULAR)
         mpAtlas->SetInertialSensor();
     mbSetInit=false;
@@ -2530,9 +2787,11 @@ bool Tracking::TrackLocalMap()
     UpdateLocalMap();
     SearchLocalPoints();
 
+    std::cout << "Tracking::TrackLocalMap() | num of local map points: " << mvpLocalMapPoints.size() << std::endl;
+    std::cout << "Tracking::TrackLocalMap() | num of local keyframes: " << mvpLocalKeyFrames.size() << std::endl;
     // TOO check outliers before PO
     int aux1 = 0, aux2=0;
-    for(int i=0; i<mCurrentFrame.N; i++)
+    for(int i=0; i<mCurrentFrame.N; i++) // For every KeyPoint in mCurrentFrame
         if( mCurrentFrame.mvpMapPoints[i])
         {
             aux1++;
@@ -2600,9 +2859,14 @@ bool Tracking::TrackLocalMap()
 
     // Decide if the tracking was succesful
     // More restrictive if there was a relocalization recently
+
+    std::cout << "Tracking::TrackLocalMap() | Number of Match inliers: " << mnMatchesInliers << std::endl;
+
     mpLocalMapper->mnMatchesInliers=mnMatchesInliers;
-    if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<50)
+    if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<50) {
+        std::cout << "Tracking::TrackLocalMap() | First unsuccessful condition" << std::endl;
         return false;
+    }
 
     if((mnMatchesInliers>10)&&(mState==RECENTLY_LOST))
         return true;
@@ -2612,6 +2876,7 @@ bool Tracking::TrackLocalMap()
     {
         if(mnMatchesInliers<15)
         {
+            std::cout << "Tracking::TrackLocalMap() | Second unsuccessful condition" << std::endl;
             return false;
         }
         else
@@ -2621,6 +2886,7 @@ bool Tracking::TrackLocalMap()
     {
         if(mnMatchesInliers<15)
         {
+            std::cout << "Tracking::TrackLocalMap() | Third unsuccessful condition" << std::endl;
             return false;
         }
         else
@@ -2628,10 +2894,13 @@ bool Tracking::TrackLocalMap()
     }
     else
     {
-        if(mnMatchesInliers<30)
+        if(mnMatchesInliers<30) {
+            std::cout << "Tracking::TrackLocalMap() | mnMatchesInliers < 30 :(" << std::endl;
             return false;
-        else
+        }else{
             return true;
+        }
+
     }
 }
 
@@ -2660,6 +2929,7 @@ bool Tracking::NeedNewKeyFrame()
     if (mpLocalMapper->IsInitializing())
         return false;
     const int nKFs = mpAtlas->KeyFramesInMap();
+    //const int nKFs = mpAtlas->KeyFramesInMap(mpAgent->GetId());
 
     // Do not insert keyframes if not enough frames have passed from last relocalisation
     if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && nKFs>mMaxFrames)
@@ -2784,6 +3054,7 @@ void Tracking::CreateNewKeyFrame()
 
     KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpAtlas->GetCurrentMap(),mpKeyFrameDB);
 
+    //if(mpAtlas->isImuInitialized(mpAgent->GetId()))
     if(mpAtlas->isImuInitialized())
         pKF->bImu = true;
 
@@ -3023,6 +3294,7 @@ void Tracking::UpdateLocalKeyFrames()
     map<KeyFrame*,int> keyframeCounter;
     if(!mpAtlas->isImuInitialized() || (mCurrentFrame.mnId<mnLastRelocFrameId+2))
     {
+        //N is the number of KeyPoints in the current frame
         for(int i=0; i<mCurrentFrame.N; i++)
         {
             MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
@@ -3030,12 +3302,15 @@ void Tracking::UpdateLocalKeyFrames()
             {
                 if(!pMP->isBad())
                 {
+                    // GetObervations returns the Keyframes observing the point and associated index in keyframe
                     const map<KeyFrame*,tuple<int,int>> observations = pMP->GetObservations();
                     for(map<KeyFrame*,tuple<int,int>>::const_iterator it=observations.begin(), itend=observations.end(); it!=itend; it++)
+                        //Looping through every KeyFrame which observes this mappoint and incrementing the KeyFrames which do.
                         keyframeCounter[it->first]++;
                 }
                 else
                 {
+                    //If the map point is bad then we invalidate it in mvpMapPoints (Which contains vector of all map points in the Frame)
                     mCurrentFrame.mvpMapPoints[i]=NULL;
                 }
             }
@@ -3067,6 +3342,9 @@ void Tracking::UpdateLocalKeyFrames()
     }
 
 
+    //So by this point we have a map of KeyFrame with a corresponding integer that shows how many mappoints they have observed
+    //All this information is stored in the std::map called keyframeCounter
+
     int max=0;
     KeyFrame* pKFmax= static_cast<KeyFrame*>(NULL);
 
@@ -3083,11 +3361,12 @@ void Tracking::UpdateLocalKeyFrames()
 
         if(it->second>max)
         {
+            //We are updating which KeyFrame has the most number of observed map points
             max=it->second;
             pKFmax=pKF;
         }
 
-        mvpLocalKeyFrames.push_back(pKF);
+        mvpLocalKeyFrames.push_back(pKF); //Updating the KeyFrames which are local
         pKF->mnTrackReferenceForFrame = mCurrentFrame.mnId;
     }
 
@@ -3100,11 +3379,14 @@ void Tracking::UpdateLocalKeyFrames()
 
         KeyFrame* pKF = *itKF;
 
+        //For every keyframe we have added previously, we find their neighbouring keyframes using the Covisibility Graph
         const vector<KeyFrame*> vNeighs = pKF->GetBestCovisibilityKeyFrames(10);
 
 
         for(vector<KeyFrame*>::const_iterator itNeighKF=vNeighs.begin(), itEndNeighKF=vNeighs.end(); itNeighKF!=itEndNeighKF; itNeighKF++)
         {
+            //Then we add every neighbour keyframe as long as they aren't flagged as bad and their reference keyframe is not the
+            //same as the reference keyframe of our set of local keyframes.
             KeyFrame* pNeighKF = *itNeighKF;
             if(!pNeighKF->isBad())
             {
@@ -3117,9 +3399,13 @@ void Tracking::UpdateLocalKeyFrames()
             }
         }
 
+        //We are also interested in the children of the keyframe as well (also considered to be a neighbour keyframe)
+        //Children keyframes come from the spanning tree of keyframes. The parent keyframe is a keyframe which shares
+        //the most mappoints as the child keyframe.
         const set<KeyFrame*> spChilds = pKF->GetChilds();
         for(set<KeyFrame*>::const_iterator sit=spChilds.begin(), send=spChilds.end(); sit!=send; sit++)
         {
+            //Again we only add the child keyframe if they are not flagged as bad and have a different reference keyframe
             KeyFrame* pChildKF = *sit;
             if(!pChildKF->isBad())
             {
@@ -3132,6 +3418,7 @@ void Tracking::UpdateLocalKeyFrames()
             }
         }
 
+        //Finally another neighbour keyframe is the parent keyframe of the local keyframes.
         KeyFrame* pParent = pKF->GetParent();
         if(pParent)
         {

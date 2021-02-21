@@ -27,6 +27,7 @@
 #include<stdlib.h>
 #include<string>
 #include<thread>
+#include<map>
 #include<opencv2/core/core.hpp>
 
 #include "Tracking.h"
@@ -207,6 +208,9 @@ private:
     // Input sensor
     eSensor mSensor;
 
+    // Use viewer
+    bool mbUseViewer;
+
     // ORB vocabulary used for place recognition and feature matching.
     ORBVocabulary* mpVocabulary;
 
@@ -258,6 +262,7 @@ private:
     std::mutex mMutexState;
 
     //CoORBSLAM
+    bool mbFirstTracker;
     bool mbFinished;
     bool mbAcceptImgFrames;
     std::mutex mMutexNewImgFrames;
@@ -269,7 +274,10 @@ private:
 
     //CoORBSLAM Agent bookkeeping
     std::vector<int> mvAgentIds;
+    std::vector<Agent*> mvpAgents;
     int mNextAgentId;
+    std::vector<Tracking*> mvpTracking;
+    std::map<int, Tracking*> mMapAgentToTracker;
 
 
 };

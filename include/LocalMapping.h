@@ -109,6 +109,10 @@ public:
     // not consider far points (clouds)
     bool mbFarPoints;
     float mThFarPoints;
+
+    // CoORBSLAM3
+
+
 protected:
 
     bool CheckNewKeyFrames();
@@ -175,6 +179,8 @@ protected:
     float mTinit;
 
     int countRefinement;
+
+    int mnAgentId;
 
     //DEBUG
     ofstream f_lm;

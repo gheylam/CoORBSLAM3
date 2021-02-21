@@ -184,7 +184,7 @@ bool ImageGrabber::GrabNewAgent(CoORBSLAM3::NewAgentRequest::Request &req,
     pNewAgent->SetViewerParams(double(req.dKeyFrameSize), int(req.nKeyFrameLineWidth), double(req.dGraphLineWidth),
                                int(req.nPointSize), double(req.dCameraSize), int(req.nCameraLineWidth),
                                double(req.dViewpointX), double(req.dViewpointY), double(req.dViewpointZ),
-                               double(req.dViewpointZ));
+                               double(req.dViewpointF));
     while(fTimeElapsed < 5) {
         if (mpSLAM->AcceptNewAgent()) {
             mpSLAM->AddNewAgent(pNewAgent);
