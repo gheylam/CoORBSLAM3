@@ -236,6 +236,8 @@ private:
     // The viewer draws the map and the current camera pose. It uses Pangolin.
     Viewer* mpViewer;
 
+    std::vector<FrameDrawer*> mvpFrameDrawers;
+
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
 
@@ -278,6 +280,7 @@ private:
     int mNextAgentId;
     std::vector<Tracking*> mvpTracking;
     std::map<int, Tracking*> mMapAgentToTracker;
+    std::mutex mMutexNewAgent;
 
 
 };

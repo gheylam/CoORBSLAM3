@@ -1327,9 +1327,8 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
 
 
     // Before this line we are not changing the map
-    std::cout << "LocalMapping::initializeIMU | Trying to get CurrentMap->mMutexMapUpdate" << std::endl;
     unique_lock<mutex> lock(mpAtlas->GetCurrentMap(mnAgentId)->mMutexMapUpdate);
-    std::cout << "LocalMapping::initializeIMU | Got the CurrentMap->mMutexMapUpdate" << std::endl;
+
     std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
     if ((fabs(mScale-1.f)>0.00001)||!mbMonocular)
     {

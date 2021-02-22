@@ -61,6 +61,11 @@ public:
     void SetTrackingPause();
 
     bool both;
+
+    bool AcceptingNewDrawers();
+
+    void InsertNewFrameDrawer(FrameDrawer* pFrameDrawer);
+
 private:
 
     bool ParseViewerParamFile(cv::FileStorage &fSettings);
@@ -70,8 +75,15 @@ private:
     bool Stop();
 
     System* mpSystem;
+
+    std::mutex mMutexAccept; // Mutex for controlling when Viewer is available for new drawer insertions
+    bool mbAccepting; //A boolean to define whether Viewer is accepting new Drawers
+    std::vector<FrameDrawer*> mvpFrameDrawers;
+    std::mutex mMutexNewFrameDrawer; //Mutex for controlling new FrameDrawer insertions
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
+
+
     Tracking* mpTracker;
 
     // 1/fps in ms

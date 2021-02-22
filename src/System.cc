@@ -100,7 +100,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
         //mpAtlas->SetInertialSensor();
 
     //Create Drawers. These are used by the Viewer
-    mpFrameDrawer = new FrameDrawer(mpAtlas);
+    //mpFrameDrawer = new FrameDrawer(mpAtlas); //For CoORBSLAM3 we are going to delay creating the Drawers when we create a new tracker
     mpMapDrawer = new MapDrawer(mpAtlas, strSettingsFile);
 
     //Initialize the Tracking thread
@@ -224,6 +224,7 @@ bool System::AcceptNewAgent(){
 }
 
 void System::AddNewAgent(Agent *pNewAgent){
+    unique_lock<mutex> lock(mMutexNewAgent);
     int nAgentId = pNewAgent->GetId();
     std::vector<int>::iterator nIndex = std::find(mvAgentIds.begin(), mvAgentIds.end(), nAgentId);
     if(nIndex != mvAgentIds.end()){
@@ -233,8 +234,11 @@ void System::AddNewAgent(Agent *pNewAgent){
         std::cout << "SYSTEM | New Agent: " << nAgentId << std::endl;
         std::cout << " joining the SLAM operation" << std::endl;
         mvAgentIds.push_back(nAgentId);
+        //Create new Drawers for this agent
+        FrameDrawer* pNewFrameDrawer = new FrameDrawer(mpAtlas);
+        mvpFrameDrawers.push_back(pNewFrameDrawer);
         //Create a new Tracker for this agent
-        Tracking* pNewTracker = new Tracking(this, pNewAgent, mpVocabulary, mpFrameDrawer,
+        Tracking* pNewTracker = new Tracking(this, pNewAgent, mpVocabulary, pNewFrameDrawer,
                                             mpMapDrawer, mpAtlas, mpKeyFrameDatabase,
                                             mSensor, "CoORBSLAM");
 
@@ -249,12 +253,23 @@ void System::AddNewAgent(Agent *pNewAgent){
         if(mbUseViewer && mbFirstTracker)
         {
             mbFirstTracker = false;
-            mpViewer = new Viewer(this, mpFrameDrawer,mpMapDrawer, pNewTracker, pNewAgent);
+            mpViewer = new Viewer(this, pNewFrameDrawer, mpMapDrawer, pNewTracker, pNewAgent);
             mptViewer = new thread(&Viewer::Run, mpViewer);
             pNewTracker->SetViewer(mpViewer);
             mpLoopCloser->mpViewer = mpViewer;
-            mpViewer->both = mpFrameDrawer->both;
+            mpViewer->both = pNewFrameDrawer->both;
             std::cout << "Created First Tracker" << std::endl;
+            return;
+        }
+
+        if(mbUseViewer && !mbFirstTracker){
+            //This means that the first tracker has already been established
+            pNewTracker->SetViewer(mpViewer);
+            while(!mpViewer->AcceptingNewDrawers()){
+                usleep(1000);
+            }
+            mpViewer->InsertNewFrameDrawer(pNewFrameDrawer);
+            return; 
         }
     }
 }
