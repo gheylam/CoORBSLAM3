@@ -126,12 +126,12 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     //Initialize the Loop Closing thread and launch
     // mSensor!=MONOCULAR && mSensor!=IMU_MONOCULAR
-    //mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR); // mSensor!=MONOCULAR);
+    mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR); // mSensor!=MONOCULAR);
     //mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
     //Initialize the LoopClosingManager thread and launch
     mpLoopClosingManager = new LoopClosingManager(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR);
-    mptLoopClosingManager = new thread(LoopClosingMananger::Run, mpLoopClosingManager);
+    //mptLoopClosingManager = new thread(LoopClosingMananger::Run, mpLoopClosingManager);
 
     /*
      * The viewer thread will only be started when the first tracker is created in
@@ -153,7 +153,8 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     //mpTracker->SetLoopClosing(mpLoopCloser);
 
     //mpLocalMapper->SetTracker(mpTracker);
-    mpLocalMapper->SetLoopCloser(mpLoopCloser);
+    mpLocalMapper->SetLoopCloser(mpLoopCloser); //This shoul be removed once we get Manage working
+    mpLocalMapper->SetLoopClosingManager(mpLoopClosingManager);
 
     //mpLoopCloser->SetTracker(mpTracker);
     //mpLoopCloser->SetLocalMapper(mpLocalMapper);
@@ -161,6 +162,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     // Fix verbosity
     Verbose::SetTh(Verbose::VERBOSITY_QUIET);
+
 
 }
 
@@ -277,6 +279,7 @@ void System::AddNewAgent(Agent *pNewAgent){
                                             mpMapDrawer, mpAtlas, mpKeyFrameDatabase,
                                             mSensor, "CoORBSLAM");
 
+        //Create a new LoopCloser
         pNewTracker->SetLocalMapper(mpLocalMapper);
         pNewTracker->SetLoopClosing(mpLoopCloser);
 
@@ -294,6 +297,8 @@ void System::AddNewAgent(Agent *pNewAgent){
             mpLoopCloser->mpViewer = mpViewer;
             mpViewer->both = pNewFrameDrawer->both;
             std::cout << "Created First Tracker" << std::endl;
+            mpLoopClosingManager->AddNewAgent(nAgentId, pNewTracker, mpViewer);
+            mpLoopClosingManager->GetAgentLoopCloser(nAgentId);
             return;
         }
 
@@ -304,6 +309,8 @@ void System::AddNewAgent(Agent *pNewAgent){
                 usleep(1000);
             }
             mpViewer->InsertNewFrameDrawer(pNewFrameDrawer);
+            mpLoopClosingManager->AddNewAgent(nAgentId, pNewTracker, mpViewer);
+            mpLoopClosingManager->GetAgentLoopCloser(nAgentId);
             return;
         }
     }

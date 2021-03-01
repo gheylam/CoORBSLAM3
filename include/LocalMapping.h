@@ -26,6 +26,7 @@
 #include "Tracking.h"
 #include "KeyFrameDatabase.h"
 #include "Initializer.h"
+#include "LoopClosingManager.h"
 
 #include <mutex>
 
@@ -36,6 +37,7 @@ namespace ORB_SLAM3
 class System;
 class Tracking;
 class LoopClosing;
+class LoopClosingManager;
 class Atlas;
 
 class LocalMapping
@@ -44,6 +46,7 @@ public:
     LocalMapping(System* pSys, Atlas* pAtlas, const float bMonocular, bool bInertial, const string &_strSeqName=std::string());
 
     void SetLoopCloser(LoopClosing* pLoopCloser);
+    void SetLoopClosingManager(LoopClosingManager* pLoopClosingManager);
 
     void SetTracker(Tracking* pTracker);
 
@@ -147,6 +150,7 @@ protected:
     Atlas* mpAtlas;
 
     LoopClosing* mpLoopCloser;
+    LoopClosingManager* mpLoopClosingManager;
     Tracking* mpTracker;
 
     std::list<KeyFrame*> mlNewKeyFrames;
