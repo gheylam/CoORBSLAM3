@@ -378,7 +378,7 @@ int main(int argc, char **argv){
 
       srv.request.sImageMsg = msgImage;
       srv.request.header.stamp = ros::Time::now(); //Set the timestamp to the time this Image is sent
-
+      std::cout << "Header Time: " << ros::Time::now() << std::endl;
       if(clientNewImg.call(srv)){
           ROS_INFO("Ack: %1d", (long int)srv.response.ack);
           nImageNum++;

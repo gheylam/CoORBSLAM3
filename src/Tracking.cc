@@ -165,7 +165,7 @@ Tracking::Tracking(System *pSys, Agent* pAgent, ORBVocabulary* pVoc, FrameDrawer
         mbOnlyTracking(false), mbMapUpdated(false), mbVO(false), mpORBVocabulary(pVoc), mpKeyFrameDB(pKFDB),
         mpInitializer(static_cast<Initializer*>(NULL)), mpSystem(pSys), mpViewer(NULL),
         mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpAtlas(pAtlas), mnLastRelocFrameId(0), time_recently_lost(5.0),
-        mnInitialFrameId(0), mbCreatedMap(false), mnFirstFrameId(0), mpCamera2(nullptr), mbAgentFirstFrame(true)
+        mnInitialFrameId(0), mbCreatedMap(false), mnFirstFrameId(0), mpCamera2(nullptr), mbAgentFirstFrame(true), mbFirstEmpty(true), mnNextAgentKFId(0)
 {
     std::cout << "Loading parameters from agent" << std::endl;
     // Load camera parameters from Agent
@@ -1251,8 +1251,7 @@ cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const d
 
 cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename)
 {
-    std::cout << "TRACKING | Inside GrabImageMonocular" << std::endl;
-    std::cout << "AgentId: " << mpAgent->GetId() << std::endl;
+    //std::cout << "TRACKING | AgentId: " << mpAgent->GetId() << std::endl;
     mImGray = im;
 
     if(mImGray.channels()==3)
@@ -1300,9 +1299,7 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
 
     lastID = mCurrentFrame.mnId;
 
-    std::cout << "TRACKING | Entering Track()" << std::endl;
     Track();
-    std::cout << "TRACKING | Exitted Track()" << std::endl;
     std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 
     double t_track = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(t1 - t0).count();
@@ -1321,6 +1318,17 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
     f_track_times << mTime_NewKF_Dec << ",";
     f_track_times << t_track << endl;
 #endif
+
+    if(mCurrentFrame.mTcw.empty() && !(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET)){
+        std::cout << "TRACKING::GrabImageMonocular() | Empty Tcw returned" << std::endl;
+        std::cout << "AgentId: " << mpAgent->GetId() << std::endl;
+        std::cout << "mState: " << mState << std::endl;
+        std::cout << "mLastProcessedState: " << mLastProcessedState << std::endl;
+        std::cout << "mvpLocalKeyFrames left: " << mvpLocalKeyFrames.size() << std::endl;
+        std::cout << "mvpLocalMapPoints left: " << mvpLocalMapPoints.size() << std::endl;
+        std::cout << "mnMatchesInlier: " << mnMatchesInliers << std::endl;
+        //exit(1);
+    }
 
     return mCurrentFrame.mTcw.clone();
 }
@@ -1603,6 +1611,7 @@ void Tracking::ResetFrameIMU()
 
 void Tracking::Track()
 {
+
 #ifdef SAVE_TIMES
     mTime_PreIntIMU = 0;
     mTime_PosePred = 0;
@@ -1620,11 +1629,11 @@ void Tracking::Track()
     if (mbAgentFirstFrame)
     {
         //This intialization is to replace the CreateNewMap in the Atlas Constructor
-        cout << "TRACKING | First Frame for Tracker, creating a new map in Atlas" << endl;
+        //cout << "TRACKING | First Frame for Tracker, creating a new map in Atlas" << endl;
         mpAtlas->CreateNewMap(mpAgent->GetId());
         //mpAtlas->CreateNewMap();
         mbAgentFirstFrame = false;
-        std::cout << "Tracking State after creating map: " << mState << std::endl;
+        //std::cout << "Tracking State after creating map: " << mState << std::endl;
     }
 
 
@@ -1636,10 +1645,12 @@ void Tracking::Track()
         return;
     }
 
-    std::cout << "TRACKING | In Method Track() calling mpAtlas->GetCurrentMap(agentId)" << std::endl;
-    Map* pCurrentMap = mpAtlas->GetCurrentMap(mpAgent->GetId());
-    std::cout << "TRACKING | In Method Track() exit mpAtlas->GetCurrentMap(agentId)" << std::endl;
 
+    Map* pCurrentMap = mpAtlas->GetCurrentMap(mpAgent->GetId());
+    cout.precision(17);
+    std::cout << "mCurrentFrame TimeStamp: " << std::fixed << mCurrentFrame.mTimeStamp << std::endl;
+    std::cout << "mLastFrame TimeStamp: " << std::fixed << mLastFrame.mTimeStamp << std::endl;
+    std::cout << "mLastFrame+1 - mCurrentFrame timestampe" << (mLastFrame.mTimeStamp+1.0) - mCurrentFrame.mTimeStamp << std::endl;
     if(mState!=NO_IMAGES_YET)
     {
         if(mLastFrame.mTimeStamp>mCurrentFrame.mTimeStamp)
@@ -1652,8 +1663,8 @@ void Tracking::Track()
         }
         else if(mCurrentFrame.mTimeStamp>mLastFrame.mTimeStamp+1.0)
         {
-            cout << "TRACKING::Track() found that currentTimeStamp > lastTimeStamp+1.0" << endl;
             cout << "id last: " << mLastFrame.mnId << "    id curr: " << mCurrentFrame.mnId << endl;
+            std::cout << "mCurrentFrame timestamp is greater than mLastFrame timestampe by 1 second" << std::endl;
             if(mpAtlas->isInertial(mpAgent->GetId()))
             {
 
@@ -1674,10 +1685,13 @@ void Tracking::Track()
                     cout << "Timestamp jump detected, before IMU initialization. Reseting..." << endl;
                     mpSystem->ResetActiveMap();
                 }
+            }else{
+                CreateMapInAtlas();
             }
 
             return;
         }
+        std::cout << "Tracking::Track() | No problems with time jumps" << std::endl;
     }
 
 
@@ -1776,15 +1790,31 @@ void Tracking::Track()
 
                 if((mVelocity.empty() && !pCurrentMap->isImuInitialized()) || mCurrentFrame.mnId<mnLastRelocFrameId+2)
                 {
-                    //Verbose::PrintMess("TRACK: Track with respect to the reference KF ", Verbose::VERBOSITY_DEBUG);
+                    Verbose::PrintMess("TRACK: Track with respect to the reference KF ", Verbose::VERBOSITY_DEBUG);
+                    //This is ran when we have initialized
                     bOK = TrackReferenceKeyFrame();
+                    //M-900 DEBUG
+                    if(bOK){
+                        std::cout << "TRACKING::TRACK() | TrackReferenceKeyFrame successful" << std::endl;
+                    }else{
+                        std::cout << "TRACKING::TRACK() | TrackReferenceKeyFrame Failed" << std::endl;
+                    }
                 }
                 else
                 {
                     //Verbose::PrintMess("TRACK: Track with motion model", Verbose::VERBOSITY_DEBUG);
                     bOK = TrackWithMotionModel();
-                    if(!bOK)
+                    if(!bOK) {
+                        std::cout << "TRACKING::TRACK() | TrackWithMotionModel Failed" << std::endl;
                         bOK = TrackReferenceKeyFrame();
+                        if(bOK){
+                            std::cout << "TRACKING::TRACK() | TrackReferenceKeyFrame2 successful" << std::endl;
+                        }else{
+                            std::cout << "TRACKING::TRACK() | TrackReferenceKeyFrame2 Failed" << std::endl;
+                        }
+                    }else{
+                        std::cout << "TRACKING::TRACK() | TrackWithMotionModel Successful" << std::endl;
+                    }
                 }
 
 
@@ -1807,8 +1837,9 @@ void Tracking::Track()
                         mState = LOST;
                     }
                 }
+                std::cout << "TRACKING::Track() | Normal Tracking routine final state: " << mState << std::endl;
             }
-            else
+            else //Branch of when mState != OK
             {
 
                 if (mState == RECENTLY_LOST)
@@ -1839,6 +1870,8 @@ void Tracking::Track()
                             mState = LOST;
                             Verbose::PrintMess("Track Lost...", Verbose::VERBOSITY_NORMAL);
                             bOK=false;
+                        }else{
+                            std::cout << "TRACKING::Track() | mState: RECENTLY LOST, Relocalize() successful!" << std::endl;
                         }
                     }
                 }
@@ -1997,6 +2030,7 @@ void Tracking::Track()
             if(mCurrentFrame.mnId>mnLastRelocFrameId+mMaxFrames)
             {
                 mTimeStampLost = mCurrentFrame.mTimeStamp;
+                std::cout << "TRACKING::Track() | bOK is false and mState is OK, mCurrentFrame.mnId > mnLastRelocFrameId+mMaxFrames (FPS)" << std::endl;
             }
         }
 
@@ -2047,7 +2081,7 @@ void Tracking::Track()
             if(mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO)
                 mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.mTcw);
 
-            // Clean VO matches
+            // Clean VO matches (Visual Odometry matches)
             for(int i=0; i<mCurrentFrame.N; i++)
             {
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
@@ -2119,9 +2153,6 @@ void Tracking::Track()
         mLastFrame = Frame(mpAgent->GetId(), mCurrentFrame);
     }
 
-
-
-
     if(mState==OK || mState==RECENTLY_LOST)
     {
         // Store frame pose information to retrieve the complete camera trajectory afterwards.
@@ -2135,6 +2166,8 @@ void Tracking::Track()
         }
         else
         {
+
+            std::cout << "TRACKING::Track() | mState is " << mState << "And mCurrentFrame.mTcw is empty!" << std::endl;
             // This can happen if tracking is lost
             mlRelativeFramePoses.push_back(mlRelativeFramePoses.back());
             mlpReferences.push_back(mlpReferences.back());
@@ -2181,7 +2214,8 @@ void Tracking::StereoInitialization()
             mCurrentFrame.SetPose(cv::Mat::eye(4,4,CV_32F));
 
         // Create KeyFrame
-        KeyFrame* pKFini = new KeyFrame(mCurrentFrame,mpAtlas->GetCurrentMap(mpAgent->GetId()),mpKeyFrameDB);
+        KeyFrame* pKFini = new KeyFrame(mCurrentFrame,mpAtlas->GetCurrentMap(mpAgent->GetId()),mpKeyFrameDB, mnNextAgentKFId);
+        mnNextAgentKFId++;
 
         // Insert KeyFrame in the map
         mpAtlas->AddKeyFrame(pKFini);
@@ -2255,10 +2289,9 @@ void Tracking::StereoInitialization()
 
 void Tracking::MonocularInitialization()
 {
-    cout << "Tracking::MonocularInitialization() | !mpInitializer=" << !mpInitializer << endl;
     if(!mpInitializer)
     {
-        std::cout << "Tracking::MonocularInitialization | mpInitializer is false" << std::endl;
+        std::cout << "TRACKING::MonocularInitialization | Setting up a new mpInitializer" << std::endl;
         // Set Reference Frame
         if(mCurrentFrame.mvKeys.size()>100)
         {
@@ -2273,7 +2306,6 @@ void Tracking::MonocularInitialization()
                 delete mpInitializer;
 
             mpInitializer =  new Initializer(mCurrentFrame,1.0,200);
-            std::cout << "Tracking::MonocularInitialization | new mpInitializer is created " << std::endl;
 
             fill(mvIniMatches.begin(),mvIniMatches.end(),-1);
 
@@ -2337,7 +2369,7 @@ void Tracking::MonocularInitialization()
             Rcw.copyTo(Tcw.rowRange(0,3).colRange(0,3));
             tcw.copyTo(Tcw.rowRange(0,3).col(3));
             mCurrentFrame.SetPose(Tcw);
-            std::cout << "Tracking::MonocularInitialization | mCurrentFrame Pose set" << std::endl;
+            //std::cout << "Tracking::MonocularInitialization | mCurrentFrame Pose set" << std::endl;
             std::cout << Tcw << std::endl;
 
             CreateInitialMapMonocular();
@@ -2351,9 +2383,10 @@ void Tracking::MonocularInitialization()
 void Tracking::CreateInitialMapMonocular()
 {
     // Create KeyFrames
-    KeyFrame* pKFini = new KeyFrame(mInitialFrame,mpAtlas->GetCurrentMap(mpAgent->GetId()),mpKeyFrameDB);
-    KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,mpAtlas->GetCurrentMap(mpAgent->GetId()),mpKeyFrameDB);
-
+    KeyFrame* pKFini = new KeyFrame(mInitialFrame,mpAtlas->GetCurrentMap(mpAgent->GetId()),mpKeyFrameDB, mnNextAgentKFId);
+    mnNextAgentKFId++;
+    KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,mpAtlas->GetCurrentMap(mpAgent->GetId()),mpKeyFrameDB, mnNextAgentKFId);
+    mnNextAgentKFId++;
     if(mSensor == System::IMU_MONOCULAR)
         pKFini->mpImuPreintegrated = (IMU::Preintegrated*)(NULL);
 
@@ -2687,8 +2720,6 @@ bool Tracking::TrackWithMotionModel()
     // Update last frame pose according to its reference keyframe
     // Create "visual odometry" points if in Localization Mode
     UpdateLastFrame();
-
-
 
     if (mpAtlas->isImuInitialized(mpAgent->GetId()) && (mCurrentFrame.mnId>mnLastRelocFrameId+mnFramesToResetIMU))
     {
@@ -3050,7 +3081,8 @@ void Tracking::CreateNewKeyFrame()
     if(!mpLocalMapper->SetNotStop(true))
         return;
 
-    KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpAtlas->GetCurrentMap(mpAgent->GetId()),mpKeyFrameDB);
+    KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpAtlas->GetCurrentMap(mpAgent->GetId()),mpKeyFrameDB, mnNextAgentKFId);
+    mnNextAgentKFId++;
 
 
     if(mpAtlas->isImuInitialized(mpAgent->GetId()))

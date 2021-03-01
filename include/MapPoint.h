@@ -187,6 +187,10 @@ public:
     long int mnFirstFrame;
     int nObs;
 
+    //CoORBSLAM3 related
+    long int mnFirstAgentKFId;
+    int mnFirstAgentId;
+
     // Variables used by the tracking
     float mTrackProjX;
     float mTrackProjY;
@@ -227,7 +231,8 @@ public:
 
     unsigned int mnOriginMapId;
 
-protected:    
+protected:
+
 
      // Position in absolute coordinates
      cv::Mat mWorldPos;

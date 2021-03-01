@@ -169,7 +169,7 @@ add_library(
         include/OptimizableTypes.h
         include/MLPnPsolver.h
         include/TwoViewReconstruction.h
-        src/ImgFrame.cpp include/ImgFrame.h src/Agent.cpp include/Agent.h)
+        src/ImgFrame.cpp include/ImgFrame.h src/Agent.cpp include/Agent.h src/LoopClosingManager.cpp include/LoopClosingManager.h)
 
 set(THIRDPARTY_LIBS
         ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so

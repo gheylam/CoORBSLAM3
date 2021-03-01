@@ -146,6 +146,26 @@ void Atlas::ChangeMap(Map* pMap)
     mpCurrentMap->SetCurrentMap();
 }
 
+void Atlas::ChangeMap(Map* pMap, int nAgentId)
+{
+    unique_lock<mutex> lock(mMutexAtlas);
+    cout << "Change to map with id: " << pMap->GetId() << endl;
+    if(mpCurrentMap){
+        mpCurrentMap->SetStoredMap();
+    }
+    mpCurrentMap = pMap;
+    mpCurrentMap->SetCurrentMap();
+
+    //Update Agent Map pointer to new map
+    if(mMapAgentMap.find(nAgentId) == mMapAgentMap.end()){
+        std::cout << "ATLAS::ChangeMap() | ERROR attempted to access non-existent agent map" << std::endl;
+        exit(1);
+    }else{
+        mMapAgentMap[nAgentId] = pMap;
+    }
+
+}
+
 //This mnLastInitKFidMAP is old and no longer used in the new algorithm
 unsigned long int Atlas::GetLastInitKFid()
 {
@@ -201,6 +221,7 @@ void Atlas::InformNewBigChange()
     unique_lock<mutex> lock(mMutexAtlas);
     mpCurrentMap->InformNewBigChange();
 }
+
 
 void Atlas::InformNewBigChange(int nAgentId)
 {
@@ -420,7 +441,9 @@ Map* Atlas::GetCurrentMap()
 
 Map* Atlas::GetCurrentMap(int nAgentId)
 {
+    //std::cout << "Atlas::GetCurreptMap | Getting Map from atlas" << std::endl;
     unique_lock<mutex> lock(mMutexAtlas);
+    //std::cout << "Atlas::GetCurreptMap | Got pass the mutex" << std::endl;
     //std::lock_guard<std::recursive_mutex> lock(mRMutexAtlas);
     //Get the CurrentMap pointer that corresponds with the given AgentId
     //std::cout << "ATLAS | In Atlas::GetCurrentMap(int nAgentId)" << std::endl;
@@ -431,14 +454,17 @@ Map* Atlas::GetCurrentMap(int nAgentId)
     }else{
         //std::cout << "ATLAS | CurrentMap found for AgentId: " << nAgentId << std::endl;
         mpCurrentMap = mMapAgentMap.find(nAgentId)->second;
+        //std::cout << "Atlas::GetCurrentMap | Got CurrentMap! Value: " << mpCurrentMap << std::endl;
     }
     if(!mpCurrentMap) {
         std::cout << "ATLAS | In Atlas::GetCurrentMap(int nAgentId) Entering CreateNewMap()" << std::endl;
         CreateNewMap(nAgentId);
         std::cout << "ATLAS | In Atlas::GetCurrentMap(int nAgentId) Finished creating a new map" << std::endl;
     }
-    while(mpCurrentMap->IsBad())
+    while(mpCurrentMap->IsBad()) {
         usleep(3000);
+        //std::cout << "Atlas::GetCurrentMap | Map is bad!" << std::endl;
+    }
     return mpCurrentMap;
 }
 

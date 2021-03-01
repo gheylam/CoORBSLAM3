@@ -27,7 +27,7 @@
 namespace ORB_SLAM3
 {
 
-FrameDrawer::FrameDrawer(Atlas* pAtlas):both(false),mpAtlas(pAtlas)
+FrameDrawer::FrameDrawer(Atlas* pAtlas, Agent* pAgent):both(false),mpAtlas(pAtlas), mpAgent(pAgent)
 {
     mState=Tracking::SYSTEM_NOT_READY;
     mIm = cv::Mat(480,640,CV_8UC3, cv::Scalar(0,0,0));
@@ -363,6 +363,8 @@ cv::Mat FrameDrawer::DrawRightFrame()
 void FrameDrawer::DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText)
 {
     stringstream s;
+    //Display the AgentId
+    s << " AGENT-ID: " << mpAgent->GetId() << " | ";
     if(nState==Tracking::NO_IMAGES_YET)
         s << " WAITING FOR IMAGES";
     else if(nState==Tracking::NOT_INITIALIZED)
@@ -373,9 +375,15 @@ void FrameDrawer::DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText)
             s << "SLAM MODE |  ";
         else
             s << "LOCALIZATION | ";
+        //Using overloaded Atlas map for Agent specific metrics
+        /*
         int nMaps = mpAtlas->CountMaps();
         int nKFs = mpAtlas->KeyFramesInMap();
         int nMPs = mpAtlas->MapPointsInMap();
+         */
+        int nMaps = mpAtlas->GetAgentMapCount(mpAgent->GetId());
+        int nKFs = mpAtlas->KeyFramesInMap(mpAgent->GetId());
+        int nMPs = mpAtlas->MapPointsInMap(mpAgent->GetId());
         s << "Maps: " << nMaps << ", KFs: " << nKFs << ", MPs: " << nMPs << ", Matches: " << mnTracked;
         if(mnTrackedVO>0)
             s << ", + VO matches: " << mnTrackedVO;

@@ -278,7 +278,7 @@ class KeyFrame
 
 public:
     KeyFrame();
-    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB);
+    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB, long unsigned int nAgentKFId);
 
     // Pose functions
     void SetPose(const cv::Mat &Tcw);
@@ -393,6 +393,9 @@ public:
     static long unsigned int nNextId;
     long unsigned int mnId;
     const long unsigned int mnFrameId;
+
+    //CoORBSLAM3
+    long unsigned int mnAgentKFId;
 
     const double mTimeStamp;
 

@@ -197,10 +197,13 @@ protected:
     bool mnFullBAIdx;
 
 
-
+    //What are these?
     vector<double> vdPR_CurrentTime;
     vector<double> vdPR_MatchedTime;
     vector<int> vnPR_TypeRecogn;
+
+    //CoORBSLAM
+    int mnAgentId;
 };
 
 } //namespace ORB_SLAM

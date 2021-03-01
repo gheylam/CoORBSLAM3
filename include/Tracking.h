@@ -261,6 +261,8 @@ protected:
     int mnAgentId;
     Agent* mpAgent;
     bool mbAgentFirstFrame;
+    bool mbFirstEmpty;
+    long unsigned int mnNextAgentKFId;
 
     //Local Map
     KeyFrame* mpReferenceKF;

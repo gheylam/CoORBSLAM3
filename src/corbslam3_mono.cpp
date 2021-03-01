@@ -55,6 +55,7 @@ public:
 
     ORB_SLAM3::System* mpSLAM;
 private:
+
     //list for buffering the incoming Image frames
     std::list<ImgFrame*> mlNewImgFramesBuffer;
 
