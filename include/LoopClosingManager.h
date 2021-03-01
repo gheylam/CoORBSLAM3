@@ -50,13 +50,25 @@ namespace ORB_SLAM3 {
         void SetViewer();
 
         void Run(); //This is the function that System will fire a new thread on
+
+        void InsertKeyFrame(KeyFrame* pKF);
         bool CheckNewKeyFrames(); // verifies whether there are any new KeyFrames in the queue
         void ProcessNewKeyFrame(); //Issues the correct LoopCloser object to deal with the new KeyFrame
         void AddNewAgent(int nAgentId, Tracking* pNewTracker, Viewer* pViewer);
 
         LoopClosing* GetAgentLoopCloser(int nAgentId);
 
-        void ProcessNewAgentQueue();
+        bool CheckFinished();
+
+        void RequestFinish();
+
+        void SetFinish();
+
+        bool isFinished();
+
+        void InformGBAStart();
+        void InformGBAEnd();
+        bool isRunningGBA();
 
     private:
         ORBVocabulary *mpVocabulary;
@@ -68,11 +80,22 @@ namespace ORB_SLAM3 {
         // Fix scale in the stereo/RGB-D case
         bool mbFixScale;
 
+        //Context
+        KeyFrame* mpCurrentKeyFrame;
+        LoopClosing* mpCurrentLoopCloser;
+
         std::mutex mMutexNewAgent;
         std::mutex mMutexNewKeyFrame;
         std::list<int> mvNewAgentIdQueue;
-        std::list<KeyFrame*> mlNewKeyFrames;
+        std::list<KeyFrame*> mlpNewKeyFrames;
         std::map<int, LoopClosing *> mmAgentToCloser;
+
+        //house keeping
+        std::mutex mMutexGBA;
+        bool mbRunningGBA;
+        bool mbFinishRequested;
+        bool mbFinished;
+        std::mutex mMutexFinish;
 
 
     };

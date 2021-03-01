@@ -126,12 +126,12 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     //Initialize the Loop Closing thread and launch
     // mSensor!=MONOCULAR && mSensor!=IMU_MONOCULAR
-    mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR); // mSensor!=MONOCULAR);
+    //mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR); // mSensor!=MONOCULAR);
     //mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
     //Initialize the LoopClosingManager thread and launch
     mpLoopClosingManager = new LoopClosingManager(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR);
-    //mptLoopClosingManager = new thread(LoopClosingMananger::Run, mpLoopClosingManager);
+    mptLoopClosingManager = new thread(&ORB_SLAM3::LoopClosingManager::Run, mpLoopClosingManager);
 
     /*
      * The viewer thread will only be started when the first tracker is created in
@@ -153,7 +153,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     //mpTracker->SetLoopClosing(mpLoopCloser);
 
     //mpLocalMapper->SetTracker(mpTracker);
-    mpLocalMapper->SetLoopCloser(mpLoopCloser); //This shoul be removed once we get Manage working
+    //mpLocalMapper->SetLoopCloser(mpLoopCloser); This shoul be removed once we get Manage working
     mpLocalMapper->SetLoopClosingManager(mpLoopClosingManager);
 
     //mpLoopCloser->SetTracker(mpTracker);
@@ -182,7 +182,7 @@ void System::Run(){
         }
         SetAcceptNewAgent(true);
         SetAcceptImgFrames(true);
-        usleep(3000);
+        usleep(2000);
     }
 }
 
@@ -279,13 +279,13 @@ void System::AddNewAgent(Agent *pNewAgent){
                                             mpMapDrawer, mpAtlas, mpKeyFrameDatabase,
                                             mSensor, "CoORBSLAM");
 
-        //Create a new LoopCloser
+
         pNewTracker->SetLocalMapper(mpLocalMapper);
-        pNewTracker->SetLoopClosing(mpLoopCloser);
+        //pNewTracker->SetLoopClosing(mpLoopCloser);
 
         //TODO These need to be "AddNewTracker in the future"
         mpLocalMapper->SetTracker(pNewTracker);
-        mpLoopCloser->SetTracker(pNewTracker);
+        //mpLoopCloser->SetTracker(pNewTracker);
         //Add the new tracker into System
         mMapAgentToTracker.insert(std::pair<int, Tracking*>(nAgentId, pNewTracker));
         if(mbUseViewer && mbFirstTracker)
@@ -294,7 +294,7 @@ void System::AddNewAgent(Agent *pNewAgent){
             mpViewer = new Viewer(this, pNewFrameDrawer, mpMapDrawer, pNewTracker, pNewAgent);
             mptViewer = new thread(&Viewer::Run, mpViewer);
             pNewTracker->SetViewer(mpViewer);
-            mpLoopCloser->mpViewer = mpViewer;
+            //mpLoopCloser->mpViewer = mpViewer;
             mpViewer->both = pNewFrameDrawer->both;
             std::cout << "Created First Tracker" << std::endl;
             mpLoopClosingManager->AddNewAgent(nAgentId, pNewTracker, mpViewer);
@@ -622,7 +622,7 @@ void System::ResetActiveMap()
 void System::Shutdown()
 {
     mpLocalMapper->RequestFinish();
-    mpLoopCloser->RequestFinish();
+    mpLoopClosingManager->RequestFinish();
     if(mpViewer)
     {
         mpViewer->RequestFinish();
@@ -631,14 +631,14 @@ void System::Shutdown()
     }
 
     // Wait until all thread have effectively stopped
-    while(!mpLocalMapper->isFinished() || !mpLoopCloser->isFinished() || mpLoopCloser->isRunningGBA())
+    while(!mpLocalMapper->isFinished() || !mpLoopClosingManager->isFinished() || mpLoopClosingManager->isRunningGBA())
     {
         if(!mpLocalMapper->isFinished())
             cout << "mpLocalMapper is not finished" << endl;
-        if(!mpLoopCloser->isFinished())
-            cout << "mpLoopCloser is not finished" << endl;
-        if(mpLoopCloser->isRunningGBA()){
-            cout << "mpLoopCloser is running GBA" << endl;
+        if(!mpLoopClosingManager->isFinished())
+            cout << "mpLoopClosingManager is not finished" << endl;
+        if(mpLoopClosingManager->isRunningGBA()){
+            cout << "mpLoopClosingManager is running GBA" << endl;
             cout << "break anyway..." << endl;
             break;
         }
