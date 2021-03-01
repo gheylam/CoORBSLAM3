@@ -59,6 +59,10 @@ void LocalMapping::SetLoopCloser(LoopClosing* pLoopCloser)
     mpLoopCloser = pLoopCloser;
 }
 
+void LocalMapping::SetLoopClosingManager(LoopClosingManager* pLoopClosingManager){
+    mpLoopClosingManager = pLoopClosingManager;
+}
+
 void LocalMapping::SetTracker(Tracking *pTracker)
 {
     mpTracker=pTracker;
@@ -232,7 +236,8 @@ void LocalMapping::Run()
 
             std::chrono::steady_clock::time_point t7 = std::chrono::steady_clock::now();
 
-            mpLoopCloser->InsertKeyFrame(mpCurrentKeyFrame);
+            //mpLoopCloser->InsertKeyFrame(mpCurrentKeyFrame);
+            mpLoopClosingManager->InsertKeyFrame(mpCurrentKeyFrame);
             std::chrono::steady_clock::time_point t8 = std::chrono::steady_clock::now();
 
             double t_procKF = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(t1 - t0).count();

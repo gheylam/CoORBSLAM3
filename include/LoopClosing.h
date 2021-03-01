@@ -38,6 +38,7 @@ namespace ORB_SLAM3
 
 class Tracking;
 class LocalMapping;
+class LoopClosingManager;
 class KeyFrameDatabase;
 class Map;
 
@@ -52,7 +53,7 @@ public:
 
 public:
 
-    LoopClosing(Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pVoc,const bool bFixScale);
+    LoopClosing(LoopClosingManager* pLCManager, Atlas* pAtlas, KeyFrameDatabase* pDB, ORBVocabulary* pVoc, const bool bFixScale);
 
     void SetTracker(Tracking* pTracker);
 
@@ -60,6 +61,7 @@ public:
 
     // Main function
     void Run();
+    void TryLoopClose(KeyFrame* pKF);
 
     void InsertKeyFrame(KeyFrame *pKF);
 
@@ -127,6 +129,7 @@ protected:
     bool mbFinished;
     std::mutex mMutexFinish;
 
+    LoopClosingManager* mpLCManager;
     Atlas* mpAtlas;
     Tracking* mpTracker;
 

@@ -32,8 +32,8 @@
 namespace ORB_SLAM3
 {
 
-LoopClosing::LoopClosing(Atlas *pAtlas, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, const bool bFixScale):
-    mbResetRequested(false), mbResetActiveMapRequested(false), mbFinishRequested(false), mbFinished(true), mpAtlas(pAtlas),
+LoopClosing::LoopClosing(LoopClosingManager* pLCManager, Atlas *pAtlas, KeyFrameDatabase *pDB, ORBVocabulary *pVoc, const bool bFixScale):
+    mpLCManager(pLCManager), mbResetRequested(false), mbResetActiveMapRequested(false), mbFinishRequested(false), mbFinished(true), mpAtlas(pAtlas),
     mpKeyFrameDB(pDB), mpORBVocabulary(pVoc), mpMatchedKF(NULL), mLastLoopKFid(0), mbRunningGBA(false), mbFinishedGBA(true),
     mbStopGBA(false), mpThreadGBA(NULL), mbFixScale(bFixScale), mnFullBAIdx(0), mnLoopNumCoincidences(0), mnMergeNumCoincidences(0),
     mbLoopDetected(false), mbMergeDetected(false), mnLoopNumNotFound(0), mnMergeNumNotFound(0)
@@ -50,6 +50,180 @@ void LoopClosing::SetTracker(Tracking *pTracker)
 void LoopClosing::SetLocalMapper(LocalMapping *pLocalMapper)
 {
     mpLocalMapper=pLocalMapper;
+}
+
+void LoopClosing::TryLoopClose(KeyFrame* pKF)
+{
+    if(mpLastCurrentKF){
+        mpLastCurrentKF->mvpLoopCandKFs.clear();
+        mpLastCurrentKF->mvpMergeCandKFs.clear();
+    }
+
+    {
+        unique_lock<mutex> lock(mMutexLoopQueue);
+        mpCurrentKF = pKF;
+        mpCurrentKF->SetNotErase();
+        mpCurrentKF->mbCurrentPlaceRecognition = true;
+        mpLastMap = mpCurrentKF->GetMap();
+        mnAgentId = mpCurrentKF->GetAgentId();
+    }
+
+    if(NewDetectCommonRegions())
+    {
+        if(mbMergeDetected)
+        {
+            if ((mpTracker->mSensor==System::IMU_MONOCULAR ||mpTracker->mSensor==System::IMU_STEREO) &&
+                (!mpCurrentKF->GetMap()->isImuInitialized()))
+            {
+                cout << "IMU is not initilized, merge is aborted" << endl;
+            }
+            else
+            {
+                Verbose::PrintMess("*Merged detected", Verbose::VERBOSITY_QUIET);
+                Verbose::PrintMess("Number of KFs in the current map: " + to_string(mpCurrentKF->GetMap()->KeyFramesInMap()), Verbose::VERBOSITY_DEBUG);
+                cv::Mat mTmw = mpMergeMatchedKF->GetPose();
+                g2o::Sim3 gSmw2(Converter::toMatrix3d(mTmw.rowRange(0, 3).colRange(0, 3)),Converter::toVector3d(mTmw.rowRange(0, 3).col(3)),1.0);
+                cv::Mat mTcw = mpCurrentKF->GetPose();
+                g2o::Sim3 gScw1(Converter::toMatrix3d(mTcw.rowRange(0, 3).colRange(0, 3)),Converter::toVector3d(mTcw.rowRange(0, 3).col(3)),1.0);
+                g2o::Sim3 gSw2c = mg2oMergeSlw.inverse();
+                g2o::Sim3 gSw1m = mg2oMergeSlw;
+
+                mSold_new = (gSw2c * gScw1);
+
+                if(mpCurrentKF->GetMap()->IsInertial() && mpMergeMatchedKF->GetMap()->IsInertial())
+                {
+                    if(mSold_new.scale()<0.90||mSold_new.scale()>1.1){
+                        mpMergeLastCurrentKF->SetErase();
+                        mpMergeMatchedKF->SetErase();
+                        mnMergeNumCoincidences = 0;
+                        mvpMergeMatchedMPs.clear();
+                        mvpMergeMPs.clear();
+                        mnMergeNumNotFound = 0;
+                        mbMergeDetected = false;
+                        Verbose::PrintMess("scale bad estimated. Abort merging", Verbose::VERBOSITY_NORMAL);
+                        return;
+                    }
+                    // If inertial, force only yaw
+                    if ((mpTracker->mSensor==System::IMU_MONOCULAR ||mpTracker->mSensor==System::IMU_STEREO) &&
+                        mpCurrentKF->GetMap()->GetIniertialBA1()) // TODO, maybe with GetIniertialBA1
+                    {
+                        Eigen::Vector3d phi = LogSO3(mSold_new.rotation().toRotationMatrix());
+                        phi(0)=0;
+                        phi(1)=0;
+                        mSold_new = g2o::Sim3(ExpSO3(phi),mSold_new.translation(),1.0);
+                    }
+                }
+
+
+//                        cout << "tw2w1: " << mSold_new.translation() << endl;
+//                        cout << "Rw2w1: " << mSold_new.rotation().toRotationMatrix() << endl;
+//                        cout << "Angle Rw2w1: " << 180*LogSO3(mSold_new.rotation().toRotationMatrix())/3.14 << endl;
+//                        cout << "scale w2w1: " << mSold_new.scale() << endl;
+
+                mg2oMergeSmw = gSmw2 * gSw2c * gScw1;
+
+                mg2oMergeScw = mg2oMergeSlw;
+
+                // TODO UNCOMMENT
+                if (mpTracker->mSensor==System::IMU_MONOCULAR ||mpTracker->mSensor==System::IMU_STEREO)
+                    MergeLocal2();
+                else
+                    MergeLocal();
+            }
+
+            vdPR_CurrentTime.push_back(mpCurrentKF->mTimeStamp);
+            vdPR_MatchedTime.push_back(mpMergeMatchedKF->mTimeStamp);
+            vnPR_TypeRecogn.push_back(1);
+
+            // Reset all variables
+            mpMergeLastCurrentKF->SetErase();
+            mpMergeMatchedKF->SetErase();
+            mnMergeNumCoincidences = 0;
+            mvpMergeMatchedMPs.clear();
+            mvpMergeMPs.clear();
+            mnMergeNumNotFound = 0;
+            mbMergeDetected = false;
+
+            if(mbLoopDetected)
+            {
+                // Reset Loop variables
+                mpLoopLastCurrentKF->SetErase();
+                mpLoopMatchedKF->SetErase();
+                mnLoopNumCoincidences = 0;
+                mvpLoopMatchedMPs.clear();
+                mvpLoopMPs.clear();
+                mnLoopNumNotFound = 0;
+                mbLoopDetected = false;
+            }
+
+        }
+
+        if(mbLoopDetected)
+        {
+            vdPR_CurrentTime.push_back(mpCurrentKF->mTimeStamp);
+            vdPR_MatchedTime.push_back(mpLoopMatchedKF->mTimeStamp);
+            vnPR_TypeRecogn.push_back(0);
+
+
+            Verbose::PrintMess("*Loop detected", Verbose::VERBOSITY_QUIET);
+
+            mg2oLoopScw = mg2oLoopSlw; //*mvg2oSim3LoopTcw[nCurrentIndex];
+            if(mpCurrentKF->GetMap()->IsInertial())
+            {
+                cv::Mat Twc = mpCurrentKF->GetPoseInverse();
+                g2o::Sim3 g2oTwc(Converter::toMatrix3d(Twc.rowRange(0, 3).colRange(0, 3)),Converter::toVector3d(Twc.rowRange(0, 3).col(3)),1.0);
+                g2o::Sim3 g2oSww_new = g2oTwc*mg2oLoopScw;
+
+                Eigen::Vector3d phi = LogSO3(g2oSww_new.rotation().toRotationMatrix());
+                //cout << "tw2w1: " << g2oSww_new.translation() << endl;
+                //cout << "Rw2w1: " << g2oSww_new.rotation().toRotationMatrix() << endl;
+                //cout << "Angle Rw2w1: " << 180*phi/3.14 << endl;
+                //cout << "scale w2w1: " << g2oSww_new.scale() << endl;
+
+                if (fabs(phi(0))<0.008f && fabs(phi(1))<0.008f && fabs(phi(2))<0.349f)
+                {
+                    if(mpCurrentKF->GetMap()->IsInertial())
+                    {
+                        // If inertial, force only yaw
+                        if ((mpTracker->mSensor==System::IMU_MONOCULAR ||mpTracker->mSensor==System::IMU_STEREO) &&
+                            mpCurrentKF->GetMap()->GetIniertialBA2()) // TODO, maybe with GetIniertialBA1
+                        {
+                            phi(0)=0;
+                            phi(1)=0;
+                            g2oSww_new = g2o::Sim3(ExpSO3(phi),g2oSww_new.translation(),1.0);
+                            mg2oLoopScw = g2oTwc.inverse()*g2oSww_new;
+                        }
+                    }
+
+                    mvpLoopMapPoints = mvpLoopMPs;//*mvvpLoopMapPoints[nCurrentIndex];
+                    CorrectLoop();
+                }
+                else
+                {
+                    cout << "BAD LOOP!!!" << endl;
+                }
+            }
+            else
+            {
+                mvpLoopMapPoints = mvpLoopMPs;
+                CorrectLoop();
+            }
+
+            // Reset all variables
+            mpLoopLastCurrentKF->SetErase();
+            mpLoopMatchedKF->SetErase();
+            mnLoopNumCoincidences = 0;
+            mvpLoopMatchedMPs.clear();
+            mvpLoopMPs.clear();
+            mnLoopNumNotFound = 0;
+            mbLoopDetected = false;
+        }
+
+    }
+
+    mpLastCurrentKF = mpCurrentKF;
+
+
 }
 
 void LoopClosing::Run()
@@ -261,6 +435,8 @@ bool LoopClosing::CheckNewKeyFrames()
 
 bool LoopClosing::NewDetectCommonRegions()
 {
+    /*
+     * We no longer need this because the context change is dealt by TryLoopClose instead
     {
         unique_lock<mutex> lock(mMutexLoopQueue);
         mpCurrentKF = mlpLoopKeyFrameQueue.front();
@@ -271,6 +447,7 @@ bool LoopClosing::NewDetectCommonRegions()
         mpLastMap = mpCurrentKF->GetMap();
         mnAgentId = mpCurrentKF->GetAgentId();
     }
+     */
 
     if(mpLastMap->IsInertial() && !mpLastMap->GetIniertialBA1())
     {
@@ -2425,6 +2602,7 @@ void LoopClosing::ResetIfRequested()
 
 void LoopClosing::RunGlobalBundleAdjustment(Map* pActiveMap, unsigned long nLoopKF)
 {
+    mpLCManager->InformGBAStart();
     Verbose::PrintMess("Starting Global Bundle Adjustment", Verbose::VERBOSITY_NORMAL);
 
     const bool bImuInit = pActiveMap->isImuInitialized();
@@ -2642,6 +2820,7 @@ void LoopClosing::RunGlobalBundleAdjustment(Map* pActiveMap, unsigned long nLoop
 
         mbFinishedGBA = true;
         mbRunningGBA = false;
+        mpLCManager->InformGBAEnd();
     }
 }
 
