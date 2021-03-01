@@ -1378,7 +1378,6 @@ cv::Mat Frame::UnprojectStereoFishEye(const int &i){
 }
 
 int Frame::GetAgentId(){
-    std::cout << "Frame::GetAgentId | Getting called means new KeyFrame!" << std::endl;
     return mnAgentId;
 }
 

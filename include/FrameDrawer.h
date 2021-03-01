@@ -23,6 +23,7 @@
 #include "Tracking.h"
 #include "MapPoint.h"
 #include "Atlas.h"
+#include "Agent.h"
 
 #include<opencv2/core/core.hpp>
 #include<opencv2/features2d/features2d.hpp>
@@ -40,7 +41,7 @@ class Viewer;
 class FrameDrawer
 {
 public:
-    FrameDrawer(Atlas* pAtlas);
+    FrameDrawer(Atlas* pAtlas, Agent* pAgent);
 
     // Update info from the last processed frame.
     void Update(Tracking *pTracker);
@@ -80,6 +81,9 @@ protected:
 
     map<long unsigned int, cv::Point2f> mmProjectPoints;
     map<long unsigned int, cv::Point2f> mmMatchedInImage;
+
+    //CoORBSLAM3 related
+    Agent* mpAgent;
 
 };
 

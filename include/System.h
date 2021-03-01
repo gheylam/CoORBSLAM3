@@ -41,6 +41,7 @@
 #include "Viewer.h"
 #include "ImuTypes.h"
 
+#include "LoopClosingManager.h"
 #include "ImgFrame.h"
 #include "Agent.h"
 #include <ros/ros.h>
@@ -131,6 +132,7 @@ public:
     void SetAcceptImgFrames(bool flag);
     bool CheckNewImgFrames();
     void ProcessNewImgFrame();
+    void ProcessRRNewImgFrames();
     void InsertImgFrame(ImgFrame *pImgFrame);
     bool GetAcceptingNewImgFrames();
 
@@ -236,6 +238,8 @@ private:
     // The viewer draws the map and the current camera pose. It uses Pangolin.
     Viewer* mpViewer;
 
+    std::vector<FrameDrawer*> mvpFrameDrawers;
+
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
 
@@ -269,15 +273,20 @@ private:
     std::mutex mMutexAccept;
     std::mutex mMutexFinish;
     std::list<ImgFrame*> mlNewImgFrames;
+    std::map<int, std::list<ImgFrame*>> mMapAgentImgFrames;
 
     bool mbAcceptAgent;
 
-    //CoORBSLAM Agent bookkeeping
+    //CoORBSLAM Agent housekeeping
     std::vector<int> mvAgentIds;
     std::vector<Agent*> mvpAgents;
     int mNextAgentId;
     std::vector<Tracking*> mvpTracking;
     std::map<int, Tracking*> mMapAgentToTracker;
+    std::mutex mMutexNewAgent;
+
+    LoopClosingManager* mpLoopClosingManager;
+    std::thread* mptLoopClosingManager;
 
 
 };

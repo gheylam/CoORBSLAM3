@@ -82,6 +82,8 @@ public:
 
     void ChangeMap(Map* pMap);
 
+    void ChangeMap(Map* pMap, int nAgentId);
+
     unsigned long int GetLastInitKFid();
 
     void SetViewer(Viewer* pViewer);

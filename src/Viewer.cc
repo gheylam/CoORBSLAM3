@@ -51,7 +51,7 @@ Viewer::Viewer(System* pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer
 
 Viewer::Viewer(System* pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Tracking *pTracking, Agent* pAgent):
         both(false), mpSystem(pSystem), mpFrameDrawer(pFrameDrawer),mpMapDrawer(pMapDrawer), mpTracker(pTracking),
-        mbFinishRequested(false), mbFinished(true), mbStopped(true), mbStopRequested(false)
+        mbFinishRequested(false), mbFinished(true), mbStopped(true), mbStopRequested(false), mbAccepting(false)
 {
 
     bool is_correct = GetAgentViewerParams(pAgent);
@@ -68,7 +68,7 @@ Viewer::Viewer(System* pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer
 
         }
     }
-
+    mvpFrameDrawers.push_back(pFrameDrawer);
     mbStopTrack = false;
 }
 
@@ -240,6 +240,7 @@ void Viewer::Run()
         if(nNumTrackersInAtlas > 0){
             bTrackerReady = true;
         }
+        //std::cout << "Viewer::Run() |Waiting for Tracker to connect" << std::endl;
         usleep(3000);
     }
 
@@ -358,9 +359,16 @@ void Viewer::Run()
         pangolin::FinishFrame();
 
         cv::Mat toShow;
-        cv::Mat im = mpFrameDrawer->DrawFrame(true);
+        cv::Mat arrFrames[mvpFrameDrawers.size()];
+        for(int nFrameDrawerId = 0; nFrameDrawerId < mvpFrameDrawers.size(); nFrameDrawerId++){
+            arrFrames[nFrameDrawerId] = mvpFrameDrawers[nFrameDrawerId]->DrawFrame(true);
+        }
 
+        cv::hconcat(arrFrames, mvpFrameDrawers.size(), toShow);
 
+        //cv::Mat im = mpFrameDrawer->DrawFrame(true);
+
+        /* CoORBSLAM3 only supports Monocular so this will be ignored
         if(both){
             cv::Mat imRight = mpFrameDrawer->DrawRightFrame();
             cv::hconcat(im,imRight,toShow);
@@ -368,6 +376,7 @@ void Viewer::Run()
         else{
             toShow = im;
         }
+        */
 
         cv::imshow("ORB-SLAM3: Current Frame",toShow);
         cv::waitKey(mT);
@@ -400,10 +409,35 @@ void Viewer::Run()
         if(CheckFinish())
             break;
 
+        {
+            //Allow a short interval for new Drawers to be added
+            unique_lock<mutex> lock(mMutexAccept);
+            //std::cout << "Viewer::Run() | Now Accepting new Drawers" << std::endl;
+            mbAccepting = true;
+        }
+        usleep(3000);
+        {
+            unique_lock<mutex> lock(mMutexAccept);
+            //std::cout << "Viewer::Run() | Now no longer accepting new Drawers" << std::endl;
+            mbAccepting = false;
+        }
+
+
 
     }
 
     SetFinish();
+}
+
+void Viewer::InsertNewFrameDrawer(FrameDrawer* pFrameDrawer)
+{
+    unique_lock<mutex> lock(mMutexNewFrameDrawer);
+    mvpFrameDrawers.push_back(pFrameDrawer);
+}
+
+bool Viewer::AcceptingNewDrawers(){
+    unique_lock<mutex> lock(mMutexAccept);
+    return mbAccepting;
 }
 
 void Viewer::RequestFinish()

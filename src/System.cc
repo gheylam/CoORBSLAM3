@@ -100,7 +100,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
         //mpAtlas->SetInertialSensor();
 
     //Create Drawers. These are used by the Viewer
-    mpFrameDrawer = new FrameDrawer(mpAtlas);
+    //mpFrameDrawer = new FrameDrawer(mpAtlas); //For CoORBSLAM3 we are going to delay creating the Drawers when we create a new tracker
     mpMapDrawer = new MapDrawer(mpAtlas, strSettingsFile);
 
     //Initialize the Tracking thread
@@ -109,7 +109,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     //Making a new tracker is now moved to System::AddNewAgent()
     //mpTracker = new Tracking(this, 1997,mpVocabulary, mpFrameDrawer, mpMapDrawer,
-    //                         mpAtlas, mpKeyFrameDatabase, strSettingsFile, mSensor, strSequence);
+    //                         mpAtlas, mpKeyFrameDatabase, strSettingsFile, mSensor, strSequence)
 
     //Initialize the Local Mapping thread and launch
     mpLocalMapper = new LocalMapping(this, mpAtlas, mSensor==MONOCULAR || mSensor==IMU_MONOCULAR, mSensor==IMU_MONOCULAR || mSensor==IMU_STEREO, strSequence);
@@ -126,9 +126,12 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     //Initialize the Loop Closing thread and launch
     // mSensor!=MONOCULAR && mSensor!=IMU_MONOCULAR
-    mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR); // mSensor!=MONOCULAR);
+    //mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR); // mSensor!=MONOCULAR);
     //mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
+    //Initialize the LoopClosingManager thread and launch
+    mpLoopClosingManager = new LoopClosingManager(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR);
+    mptLoopClosingManager = new thread(LoopClosingMananger::Run, mpLoopClosingManager);
 
     /*
      * The viewer thread will only be started when the first tracker is created in
@@ -153,7 +156,8 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     mpLocalMapper->SetLoopCloser(mpLoopCloser);
 
     //mpLoopCloser->SetTracker(mpTracker);
-    mpLoopCloser->SetLocalMapper(mpLocalMapper);
+    //mpLoopCloser->SetLocalMapper(mpLocalMapper);
+    mpLoopClosingManager->SetLocalMapper(mpLocalMapper);
 
     // Fix verbosity
     Verbose::SetTh(Verbose::VERBOSITY_QUIET);
@@ -168,15 +172,15 @@ void System::Run(){
         SetAcceptImgFrames(false);
         //Check if there are new Image Frames in the queue
         if(CheckNewImgFrames()){
-            std::cout << "New Image Frames found" << std::endl;
+            //std::cout << "SYSTEM::Run() | New Image Frames found" << std::endl;
+            //std::cout << "SYSTEM::Run() | LocalMapper is stopped: " << mpLocalMapper->isStopped() << std::endl;
             //If there is a new KeyFrame then we process it
-            ProcessNewImgFrame();
-        }else{
-            //std::cout << "No New Image Frames found" << std::endl;
+            //ProcessNewImgFrame();
+            ProcessRRNewImgFrames();
         }
         SetAcceptNewAgent(true);
         SetAcceptImgFrames(true);
-        usleep(10000);
+        usleep(3000);
     }
 }
 
@@ -187,7 +191,15 @@ void System::SetAcceptImgFrames(bool flag){
 
 bool System::CheckNewImgFrames(){
     unique_lock<mutex> lock(mMutexNewImgFrames);
-    return(!mlNewImgFrames.empty());
+    bool bEmpty = false;
+    std::map<int, std::list<ImgFrame*>>::iterator it;
+    for(it = mMapAgentImgFrames.begin(); it != mMapAgentImgFrames.end(); it++){
+        if(!it->second.empty()){
+            bEmpty = true;
+            break;
+        }
+    }
+    return(bEmpty);
 }
 
 void System::ProcessNewImgFrame(){
@@ -201,9 +213,32 @@ void System::ProcessNewImgFrame(){
     std::cout << "SYSTEM | Finished tracking new Img Frame" << std::endl;
 }
 
+void System::ProcessRRNewImgFrames(){
+    //Process the New ImgFrames in a round robin procedure
+    unique_lock<mutex> lock(mMutexNewImgFrames);
+    std::map<int, std::list<ImgFrame*>>::iterator it;
+    for(it = mMapAgentImgFrames.begin(); it != mMapAgentImgFrames.end(); it++){
+        if(!it->second.empty()) {
+            ImgFrame *pCurrentImgFrame = it->second.front(); //Get the front item of the ImgFrame list from an entry of the map
+            it->second.pop_front(); //remove the head of the ImgFrame list
+            mpTracker = mMapAgentToTracker.find(pCurrentImgFrame->GetAgentId())->second;
+            TrackMonocular(pCurrentImgFrame->GetImage(), pCurrentImgFrame->GetTimestamp(),
+                           pCurrentImgFrame->GetAgentId());
+        }
+    }
+}
+
 void System::InsertImgFrame(ImgFrame *pImgFrame){
     unique_lock<mutex> lock(mMutexNewImgFrames);
-    mlNewImgFrames.push_back(pImgFrame);
+    //mlNewImgFrames.push_back(pImgFrame);
+    if(mMapAgentImgFrames.find(pImgFrame->GetAgentId()) == mMapAgentImgFrames.end()){
+        std::cout << "SYSTEM:InsertImgFrame | ImgFrame from a new Agent found!";
+        std::list<ImgFrame*> lpImgFrames;
+        lpImgFrames.push_back(pImgFrame);
+        mMapAgentImgFrames.insert(pair<int, std::list<ImgFrame*>>(pImgFrame->GetAgentId(), lpImgFrames));
+    }else{
+        mMapAgentImgFrames[pImgFrame->GetAgentId()].push_back(pImgFrame);
+    }
 }
 
 bool System::GetAcceptingNewImgFrames(){
@@ -224,6 +259,7 @@ bool System::AcceptNewAgent(){
 }
 
 void System::AddNewAgent(Agent *pNewAgent){
+    unique_lock<mutex> lock(mMutexNewAgent);
     int nAgentId = pNewAgent->GetId();
     std::vector<int>::iterator nIndex = std::find(mvAgentIds.begin(), mvAgentIds.end(), nAgentId);
     if(nIndex != mvAgentIds.end()){
@@ -233,8 +269,11 @@ void System::AddNewAgent(Agent *pNewAgent){
         std::cout << "SYSTEM | New Agent: " << nAgentId << std::endl;
         std::cout << " joining the SLAM operation" << std::endl;
         mvAgentIds.push_back(nAgentId);
+        //Create new Drawers for this agent
+        FrameDrawer* pNewFrameDrawer = new FrameDrawer(mpAtlas, pNewAgent);
+        mvpFrameDrawers.push_back(pNewFrameDrawer);
         //Create a new Tracker for this agent
-        Tracking* pNewTracker = new Tracking(this, pNewAgent, mpVocabulary, mpFrameDrawer,
+        Tracking* pNewTracker = new Tracking(this, pNewAgent, mpVocabulary, pNewFrameDrawer,
                                             mpMapDrawer, mpAtlas, mpKeyFrameDatabase,
                                             mSensor, "CoORBSLAM");
 
@@ -249,12 +288,23 @@ void System::AddNewAgent(Agent *pNewAgent){
         if(mbUseViewer && mbFirstTracker)
         {
             mbFirstTracker = false;
-            mpViewer = new Viewer(this, mpFrameDrawer,mpMapDrawer, pNewTracker, pNewAgent);
+            mpViewer = new Viewer(this, pNewFrameDrawer, mpMapDrawer, pNewTracker, pNewAgent);
             mptViewer = new thread(&Viewer::Run, mpViewer);
             pNewTracker->SetViewer(mpViewer);
             mpLoopCloser->mpViewer = mpViewer;
-            mpViewer->both = mpFrameDrawer->both;
+            mpViewer->both = pNewFrameDrawer->both;
             std::cout << "Created First Tracker" << std::endl;
+            return;
+        }
+
+        if(mbUseViewer && !mbFirstTracker){
+            //This means that the first tracker has already been established
+            pNewTracker->SetViewer(mpViewer);
+            while(!mpViewer->AcceptingNewDrawers()){
+                usleep(1000);
+            }
+            mpViewer->InsertNewFrameDrawer(pNewFrameDrawer);
+            return;
         }
     }
 }
@@ -403,6 +453,7 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
             while(!mpLocalMapper->isStopped())
             {
                 usleep(1000);
+                std::cout << "System::TrackMonocular | mpLocalMapper has stopped, tracking paused" << std::endl;
             }
 
             mpTracker->InformOnlyTracking(true);
@@ -412,6 +463,7 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
         {
             mpTracker->InformOnlyTracking(false);
             mpLocalMapper->Release();
+            std:cout << "System:TrackMonocular | Finished releasing LocalMapper" << std::endl;
             mbDeactivateLocalizationMode = false;
         }
     }
@@ -437,9 +489,9 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
         for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
             mpTracker->GrabImuData(vImuMeas[i_imu]);
 
-    std::cout << "SYSTEM | Calling mpTracker->GrabImageMonocular()" << std::endl;
+    //std::cout << "SYSTEM | Calling mpTracker->GrabImageMonocular()" << std::endl;
     cv::Mat Tcw = mpTracker->GrabImageMonocular(im,timestamp,filename);
-    std::cout << "SYSTEM | mpTracker->GrabImageMonocular() has returned" << std::endl;
+    //std::cout << "SYSTEM | mpTracker->GrabImageMonocular() has returned" << std::endl;
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;
     mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
@@ -450,6 +502,7 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
 
 cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const int nAgentID, const vector<IMU::Point>& vImuMeas, string filename)
 {
+    bool bLocalMapperStopped = false;
     if(mSensor!=MONOCULAR && mSensor!=IMU_MONOCULAR)
     {
         cerr << "ERROR: you called TrackMonocular but input sensor was not set to Monocular nor Monocular-Inertial." << endl;
@@ -467,6 +520,8 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
             while(!mpLocalMapper->isStopped())
             {
                 usleep(1000);
+                std::cout << "System::TrackMonocular | mpLocalMapper has stopped, tracking paused" << std::endl;
+                bLocalMapperStopped = true;
             }
 
             mpTracker->InformOnlyTracking(true);
@@ -476,6 +531,7 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
         {
             mpTracker->InformOnlyTracking(false);
             mpLocalMapper->Release();
+            std:cout << "LoopClosing::TrackMonocular (CoORBSLAM3) | Finished releasing LocalMapper" << std::endl;
             mbDeactivateLocalizationMode = false;
         }
     }
@@ -501,17 +557,20 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp, const
         for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
             mpTracker->GrabImuData(vImuMeas[i_imu]);
 
-
+    if(bLocalMapperStopped){
+        std::cout << "System::TrackMonocular() | Calling GrabImageMonocular()" << std::endl;
+    }
     cv::Mat Tcw = mpTracker->GrabImageMonocular(im,timestamp,filename);
-
+    if(bLocalMapperStopped){
+        std::cout << "System::TrackMonocular() | Returned from GrabImageMonocular()" << std::endl;
+    }
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;
     mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
     mTrackedKeyPointsUn = mpTracker->mCurrentFrame.mvKeysUn;
-    std::cout << mTrackingState << std::endl;
-    std::cout << mTrackedMapPoints.size() << std::endl;
-    std::cout << mTrackedKeyPointsUn.size() << std::endl;
-    std::cout << Tcw << std::endl;
+
+    //std::cout << "System::TrackMonocular() | Tcw: " << std::endl;
+    //std::cout << Tcw << std::endl;
     return Tcw;
 }
 

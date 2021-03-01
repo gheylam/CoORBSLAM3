@@ -52,7 +52,6 @@ void LoopClosing::SetLocalMapper(LocalMapping *pLocalMapper)
     mpLocalMapper=pLocalMapper;
 }
 
-
 void LoopClosing::Run()
 {
     mbFinished =false;
@@ -269,8 +268,8 @@ bool LoopClosing::NewDetectCommonRegions()
         // Avoid that a keyframe can be erased while it is being process by this thread
         mpCurrentKF->SetNotErase();
         mpCurrentKF->mbCurrentPlaceRecognition = true;
-
         mpLastMap = mpCurrentKF->GetMap();
+        mnAgentId = mpCurrentKF->GetAgentId();
     }
 
     if(mpLastMap->IsInertial() && !mpLastMap->GetIniertialBA1())
@@ -579,7 +578,7 @@ bool LoopClosing::DetectCommonRegionsFromBoW(std::vector<KeyFrame*> &vpBowCand, 
     ORBmatcher matcher(0.75, true);
     int nNumGuidedMatching = 0;
 
-    // Varibles to select the best numbe
+    // Varibles to select the best number
     KeyFrame* pBestMatchedKF;
     int nBestMatchesReproj = 0;
     int nBestNumCoindicendes = 0;
@@ -1227,7 +1226,7 @@ void LoopClosing::CorrectLoop()
     //cout << "Optimize essential graph finished" << endl;
     //usleep(5*1000*1000);
 
-    mpAtlas->InformNewBigChange();
+    mpAtlas->InformNewBigChange(mnAgentId);
 
     // Add loop edge
     mpLoopMatchedKF->AddLoopEdge(mpCurrentKF);
@@ -1245,7 +1244,7 @@ void LoopClosing::CorrectLoop()
 
     // Loop closed. Release Local Mapping.
     mpLocalMapper->Release();    
-
+    std:cout << "LoopClosing::CorrectLoop | Finished releasing LocalMapper" << std::endl;
     mLastLoopKFid = mpCurrentKF->mnId; //TODO old varible, it is not use in the new algorithm
 }
 
@@ -1616,7 +1615,7 @@ void LoopClosing::MergeLocal()
             //pMPi->UpdateNormalAndDepth();
         }
 
-        mpAtlas->ChangeMap(pMergeMap);
+        mpAtlas->ChangeMap(pMergeMap, mnAgentId);
         mpAtlas->SetMapBad(pCurrentMap);
         pMergeMap->IncreaseChangeIndex();
         //TODO for debug
@@ -1872,6 +1871,7 @@ void LoopClosing::MergeLocal()
 
 
     mpLocalMapper->Release();
+    std:cout << "LoopClosing::MergeLocal() | Finished releasing LocalMapper" << std::endl;
 
 
     Verbose::PrintMess("MERGE-VISUAL: Finally there are " + to_string(pMergeMap->KeyFramesInMap()) + "KFs and " + to_string(pMergeMap->MapPointsInMap()) + " MPs in the complete map ", Verbose::VERBOSITY_DEBUG);
@@ -1941,7 +1941,6 @@ void LoopClosing::printReprojectionError(set<KeyFrame*> &spLocalWindowKFs, KeyFr
     }
 
 }
-
 
 void LoopClosing::MergeLocal2()
 {
@@ -2224,6 +2223,7 @@ void LoopClosing::MergeLocal2()
 
     // Release Local Mapping.
     mpLocalMapper->Release();
+    std:cout << "LoopClosing::MergeLocal2 | Finished releasing LocalMapper" << std::endl;
 
 
     return;
@@ -2278,7 +2278,6 @@ void LoopClosing::CheckObservations(set<KeyFrame*> &spKFsMap1, set<KeyFrame*> &s
     cout << "----------------------" << endl;
 }
 
-
 void LoopClosing::SearchAndFuse(const KeyFrameAndPose &CorrectedPosesMap, vector<MapPoint*> &vpMapPoints)
 {
     ORBmatcher matcher(0.8);
@@ -2320,7 +2319,6 @@ void LoopClosing::SearchAndFuse(const KeyFrameAndPose &CorrectedPosesMap, vector
     cout << "FUSE: " << total_replaces << " MPs had been fused" << endl;
 }
 
-
 void LoopClosing::SearchAndFuse(const vector<KeyFrame*> &vConectedKFs, vector<MapPoint*> &vpMapPoints)
 {
     ORBmatcher matcher(0.8);
@@ -2356,8 +2354,6 @@ void LoopClosing::SearchAndFuse(const vector<KeyFrame*> &vConectedKFs, vector<Ma
     }
     cout << "FUSE-POSE: " << total_replaces << " MPs had been fused" << endl;
 }
-
-
 
 void LoopClosing::RequestReset()
 {
@@ -2639,6 +2635,7 @@ void LoopClosing::RunGlobalBundleAdjustment(Map* pActiveMap, unsigned long nLoop
             // mpTracker->UpdateFrameIMU(1.0f, mpTracker->GetLastKeyFrame()->GetImuBias(), mpTracker->GetLastKeyFrame());
 
             mpLocalMapper->Release();
+            std:cout << "LoopClosing::RunGlobalBundleAdjustment | Finished releasing LocalMapper" << std::endl;
 
             Verbose::PrintMess("Map updated!", Verbose::VERBOSITY_NORMAL);
         }

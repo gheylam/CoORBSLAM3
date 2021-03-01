@@ -68,30 +68,38 @@ void LocalMapping::Run()
 {
 
     mbFinished = false;
+    int nStoppedIndex = 0;
+    int nAfterStopIndex = 0;
 
     while(1)
     {
         // Tracking will see that Local Mapping is busy
         SetAcceptKeyFrames(false);
-
         // Check if there are keyframes in the queue
         if(CheckNewKeyFrames() && !mbBadImu)
         {
+            if(nAfterStopIndex < nStoppedIndex){
+                std::cout << "LocalMapping::Run() | First frame after stop index: " << nStoppedIndex << std::endl;
+                nAfterStopIndex++;
+            }
+
             // std::cout << "LM" << std::endl;
             std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
 
             // BoW conversion and insertion in Map
             ProcessNewKeyFrame();
+            //std::cout << "LocalMapping::Run() | Finished processing new KeyFrame" << std::endl;
             std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 
             // Check recent MapPoints
             MapPointCulling();
             std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
+            //std::cout << "LocalMapping::Run() | Finished MapPointCulling" << std::endl;
 
             // Triangulate new MapPoints
             CreateNewMapPoints();
             std::chrono::steady_clock::time_point t3 = std::chrono::steady_clock::now();
-
+            //std::cout << "LocalMapping::Run() | Created NewMapPoints" << std::endl;
             // Save here:
             // # Cov KFs
             // # tot Kfs
@@ -170,6 +178,7 @@ void LocalMapping::Run()
 
                 // Check redundant local Keyframes
                 KeyFrameCulling();
+                //std::cout << "LocalMapping::Run() | Culled KeyFrames" << std::endl;
 
                 t6 = std::chrono::steady_clock::now();
 
@@ -244,7 +253,7 @@ void LocalMapping::Run()
             f_lm << t_KF_cull << ",";
             f_lm << setprecision(0) << num_FixedKF_BA << "\n";*/
             //--
-
+            //std::cout << "LocalMapping::Run() | KeyFrames left" << mlNewKeyFrames.size() << std::endl;
         }
         else if(Stop() && !mbBadImu)
         {
@@ -256,6 +265,9 @@ void LocalMapping::Run()
             }
             if(CheckFinish())
                 break;
+            std::cout << "LocalMapping::Run() | I am no longer stopped!" << std::endl;
+            nStoppedIndex++;
+            std::cout << "LocalMapping::Run() | " << nStoppedIndex << "th stop" << std::endl;
         }
 
         ResetIfRequested();
@@ -268,6 +280,7 @@ void LocalMapping::Run()
 
         // cout << "LM: normal usleep" << endl;
         usleep(3000);
+
     }
 
     //f_lm.close();
@@ -343,8 +356,9 @@ void LocalMapping::MapPointCulling()
 {
     // Check Recent Added MapPoints
     list<MapPoint*>::iterator lit = mlpRecentAddedMapPoints.begin();
-    const unsigned long int nCurrentKFid = mpCurrentKeyFrame->mnId;
-
+    //const unsigned long int nCurrentKFid = mpCurrentKeyFrame->mnId;
+    const unsigned long int nCurrentKFAgentKFId = mpCurrentKeyFrame->mnAgentKFId;
+    const int nCurrentKFAgentId = mpCurrentKeyFrame->GetAgentId();
     int nThObs;
     if(mbMonocular)
         nThObs = 2;
@@ -354,10 +368,12 @@ void LocalMapping::MapPointCulling()
 
     int borrar = mlpRecentAddedMapPoints.size();
 
+
     while(lit!=mlpRecentAddedMapPoints.end())
     {
         MapPoint* pMP = *lit;
 
+        /* These Conditions have been replaced to better fit Multi Agent scenario
         if(pMP->isBad())
             lit = mlpRecentAddedMapPoints.erase(lit);
         else if(pMP->GetFoundRatio()<0.25f)
@@ -377,12 +393,38 @@ void LocalMapping::MapPointCulling()
             lit++;
             borrar--;
         }
+         */
+        //First we check whether the Frame and MapPoint belong to the same Agent
+        if(nCurrentKFAgentId==pMP->mnFirstAgentId) {
+            if (pMP->isBad())
+                lit = mlpRecentAddedMapPoints.erase(lit);
+            else if (pMP->GetFoundRatio() < 0.25f) {
+                pMP->SetBadFlag();
+                lit = mlpRecentAddedMapPoints.erase(lit);
+            } else if (((int) nCurrentKFAgentKFId - (int) pMP->mnFirstAgentKFId) >= 2 && pMP->Observations() <= cnThObs) {
+                pMP->SetBadFlag();
+                lit = mlpRecentAddedMapPoints.erase(lit);
+            } else if (((int) nCurrentKFAgentKFId - (int) pMP->mnFirstAgentKFId) >= 3)
+                lit = mlpRecentAddedMapPoints.erase(lit);
+            else {
+                lit++;
+                borrar--;
+            }
+        }else{
+            lit++;
+            borrar--;
+        }
+
     }
-    //cout << "erase MP: " << borrar << endl;
+    cout << "LocalMapping::MapPointCulling() | AgentId: " << mnAgentId << endl;
+    cout << "LocalMapping::MapPointCulling() | Erased MP: " << borrar << endl;
 }
 
 void LocalMapping::CreateNewMapPoints()
 {
+    //Debugging variable
+    int nNewMapPoint = 0;
+
     // Retrieve neighbor keyframes in covisibility graph
     int nn = 10;
     // For stereo inertial case
@@ -722,8 +764,10 @@ void LocalMapping::CreateNewMapPoints()
 
             mpAtlas->AddMapPoint(pMP);
             mlpRecentAddedMapPoints.push_back(pMP);
+            nNewMapPoint++;
         }
     }
+    std::cout << "LocalMapping::CreateNewMapPoints() | New Map Points created: " << nNewMapPoint << std::endl;
 }
 
 void LocalMapping::SearchInNeighbors()
@@ -1111,7 +1155,6 @@ void LocalMapping::RequestReset()
             if(!mbResetRequested)
                 break;
         }
-
         usleep(3000);
     }
     cout << "LM: Map reset, Done!!!" << endl;
@@ -1327,9 +1370,8 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
 
 
     // Before this line we are not changing the map
-    std::cout << "LocalMapping::initializeIMU | Trying to get CurrentMap->mMutexMapUpdate" << std::endl;
     unique_lock<mutex> lock(mpAtlas->GetCurrentMap(mnAgentId)->mMutexMapUpdate);
-    std::cout << "LocalMapping::initializeIMU | Got the CurrentMap->mMutexMapUpdate" << std::endl;
+
     std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
     if ((fabs(mScale-1.f)>0.00001)||!mbMonocular)
     {
