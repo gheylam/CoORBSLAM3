@@ -134,13 +134,16 @@ bool ImageGrabber::GrabImageSrv(CoORBSLAM3::NewAgentFeed::Request &req,
     // Copy the ros image message to cv::Mat.
     cv_bridge::CvImagePtr cv_ptr;
     try{
-        cv_ptr = cv_bridge::toCvCopy(req.sImageMsg);
+        cv_ptr = cv_bridge::toCvCopy(req.sImageMsg, sensor_msgs::image_encodings::MONO8);
     }catch (cv_bridge::Exception& e){
         ROS_ERROR("cv_bridge exception: %s", e.what());
         return false;
     }
     ImgFrame* pNewImgFrame = new ImgFrame(cv_ptr->image, req.header.stamp.toSec(), req.nAgentID);
     {
+        //cv::namedWindow("Display window2", cv::WINDOW_AUTOSIZE); //create a window for display
+        //cv::imshow("Display window2", mImage);
+        //cv::waitKey(0); //Wait for a keystroke in the window
         unique_lock<mutex> lock(mMutexImgFrameListChanges);
         mlNewImgFramesBuffer.push_back(pNewImgFrame);
         std::cout << "Added new ImgFrame in ROS script" << std::endl;

@@ -27,10 +27,17 @@ Although if you are not using OpenCV 4 you may run into build problems. The ares
    
    e.g. `rosrun CoORBSLAM3 CoORBSLAM3_mono ./Vocabulary/ORBvoc.txt ./Examples/Monocular/EuRoC.yaml`
 6. Launch the agent that feeds images 
-   `rosrun CoORBSLAM3 agent_image <int::AgentId> <String::Path to Image Frames>`
-   e.g:  `rosrun CoORBSLAM3 agent_image 2021 "~/data/imgs/"`
-
+   `rosrun CoORBSLAM3 agent_image <int::AgentId> <String::Path to Image Frames> <String::Path to Parameter File>`
+   e.g:  `rosrun CoORBSLAM3 agent_image 2021 "./data/imgs/" "./EuRoC.yaml`
+   An example parameter file is provided called  ROOM.YAML, both the server and the agent currently use the same
+   parameter file. 
 7. After launching your first Agent you can continue to launch additional agents with unique integer AgentIDs.
+
+## Example Datasets 
+	- You can use the EuRoC data which can be obtained [here](https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets)
+	- You can also use my random dataset of a room with ROOM.YAML parameter file [here](https://drive.google.com/file/d/1SLa1uzJEkkItUc2Yn_aN5i1Ulo1uD-6i/view?usp=sharing)
+	
+	- If you create you own dataset, you need to calibrate your camera and input the intrinsics and distortion parameters into your parameter file. (fx, fy, cx, cy, k1, k2, p1 and p2). You will also need to convert your images to greyscale first. 
 
 ## Fixing OpenCV3 conflicts with OpenCV4 
 
