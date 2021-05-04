@@ -301,7 +301,7 @@ int main(int argc, char **argv){
   bool bParsed =  ParseParamFile(srvNewAgentReq, argv[3]);
   if(!bParsed){
       ROS_ERROR("Failed to parse parameter file");
-      return 1;
+      ros::shutdown();
   }
   //Send a request to server to add this agent as part of the SLAM operation
   srvNewAgentReq.request.header.stamp = ros::Time::now();
@@ -313,11 +313,11 @@ int main(int argc, char **argv){
           ROS_INFO("Agent has joined the SLAM operation.");
       }else{
           ROS_INFO("Agent has failed to join the SLAM operation.");
-          return 1;
+          ros::shutdown();
       }
   }else{
         ROS_ERROR("Failed to reach Server, shutting down");
-        return 1;
+        ros::shutdown();
   }
 
   //Service for passing new image frames to the server
@@ -325,7 +325,6 @@ int main(int argc, char **argv){
   CoORBSLAM3::NewAgentFeed srv;
 
   //Load in all the images from the dataset
-  std::vector<cv::String> vsFileNames;
   //TODO get filepath directory from commandline arugments [DONE]
   cv::String sArgPath = argv[2];
   int nLastCharIndex = sArgPath.length() - 1;
@@ -337,19 +336,19 @@ int main(int argc, char **argv){
   std::cout << sArgPath.c_str() << std::endl;
   cv::String sDatasetPath = sArgPath;
   std::cout << sDatasetPath << std::endl;
-
+  std::vector<cv::String> vsFileNames;
   std::cout << "Loading dataset, might take awhile..." << std::endl;
   try {
       cv::glob(sDatasetPath, vsFileNames, false);
   }catch(...){
       ROS_ERROR((cv::String("Could not read directory at: ") + sDatasetPath).c_str());
-      return 1;
+      ros::shutdown();
   }
   //Validate whether the path was correct
   if(vsFileNames.empty()){
       cv::String sBadPath = "No PNGs found at: " + sDatasetPath;
       ROS_ERROR(sBadPath.c_str());
-      return 1;
+      ros::shutdown();
   }
   std::cout << "Finished loading dataset" << std::endl;
 
@@ -364,6 +363,7 @@ int main(int argc, char **argv){
   //Feed data at 20Hz (Could be adjusted)
   ros::Rate rate(20);
 
+  cv::namedWindow("Display window", cv::WINDOW_AUTOSIZE);
   int nImageNum = 0; //Index into the file names of each image
   while(ros::ok() && (nImageNum < vsFileNames.size())){
       std::cout << vsFileNames[nImageNum] << std::endl;
@@ -372,6 +372,11 @@ int main(int argc, char **argv){
           ROS_ERROR_STREAM("Could not open or find the image at: " << vsFileNames[nImageNum]);
           ros::shutdown();
       }
+      //display the image frame
+      cv::imshow("Display window", mImage);
+      int k = cv::waitKey(50);
+
+
       pImgBridge = cv_bridge::CvImage(std_msgs::Header(),
                                       sensor_msgs::image_encodings::MONO8, mImage);
       pImgBridge.toImageMsg(msgImage);

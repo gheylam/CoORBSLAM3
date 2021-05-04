@@ -23,6 +23,7 @@
 #include <thread>
 #include <pangolin/pangolin.h>
 #include <iomanip>
+#include <chrono>
 #include <openssl/md5.h>
 #include <boost/serialization/base_object.hpp>
 #include <boost/serialization/string.hpp>
@@ -167,6 +168,8 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 }
 
 void System::Run(){
+    auto start_time = std::chrono::system_clock::now();
+    bool bFirstFrame = true;
     while(1)
     {
         //ROS component will see that System is busy
@@ -174,11 +177,19 @@ void System::Run(){
         SetAcceptImgFrames(false);
         //Check if there are new Image Frames in the queue
         if(CheckNewImgFrames()){
+            if(bFirstFrame){
+                start_time = std::chrono::system_clock::now();
+                bFirstFrame = false;
+            }
             //std::cout << "SYSTEM::Run() | New Image Frames found" << std::endl;
             //std::cout << "SYSTEM::Run() | LocalMapper is stopped: " << mpLocalMapper->isStopped() << std::endl;
             //If there is a new KeyFrame then we process it
             //ProcessNewImgFrame();
             ProcessRRNewImgFrames();
+        }else{
+            auto latestTime = std::chrono::system_clock::now();
+            std::chrono::duration<double> timeElapsed  = latestTime - start_time;
+            std::cout << "SYSTEM::RUN() NO KEYFRAMES AFTER: " << timeElapsed.count() << std::endl;
         }
         SetAcceptNewAgent(true);
         SetAcceptImgFrames(true);
